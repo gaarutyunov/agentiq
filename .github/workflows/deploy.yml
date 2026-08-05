@@ -1,0 +1,84 @@
+# SPEC.md §13.1 — GitHub Pages in **branch mode**. Artifact-based Pages
+# deployment is deliberately not used: PR previews (§13.2) require branch mode,
+# and the two cannot coexist on one repository.
+name: Deploy demo
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+# §13.1. `cancel-in-progress: false` because each run publishes a commit to
+# gh-pages; cancelling one mid-push would leave the branch reflecting neither
+# the old nor the new tree.
+concurrency:
+  group: pages-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      - name: Build WASM demo
+        run: make demo
+
+      # §18.3. The demo is deployed unconditionally on a push to main, so the
+      # size gate has to run here too — otherwise a binary over 40 MiB reaches
+      # Pages and only fails on the next CI run.
+      - name: WASM size gate
+        run: make wasm-size
+
+      # DEVIATION FROM §13.1, and the spec is wrong here in a way that would
+      # have shipped silently.
+      #
+      # §13.1 writes `clean-exclude: pr-preview` and calls it mandatory:
+      # "without it, a production deploy wipes every live PR preview". That is
+      # true, and `clean-exclude` is **not an input of this action**. It
+      # belongs to JamesIves/github-pages-deploy-action — which is what
+      # rossjrw/pr-preview-action's own README uses in that example, so the
+      # parameter looks to have been copied across actions. GitHub Actions
+      # ignores unknown inputs without error, so §13.1 as written produces a
+      # green deploy that does precisely the thing §13.1 forbids.
+      #
+      # Verified against peaceiris/actions-gh-pages@v4's source, not its docs:
+      # src/git-utils.ts guards the wipe on `keep_files` alone —
+      #
+      #     if (inps.KeepFiles) { … } else {
+      #       await exec.exec('git', ['rm', '-r', '--ignore-unmatch', '*']);
+      #     }
+      #
+      # — so with the default `keep_files: false` the first push to main
+      # deletes every pr-preview/pr-N/ on gh-pages. `keep_files: true` is the
+      # only equivalent this action offers.
+      #
+      # It is not a perfect equivalent, and the difference is worth knowing:
+      # `clean-exclude` cleans everything *except* the named path, whereas
+      # `keep_files` cleans nothing. An asset removed or renamed in demo/web/
+      # will therefore linger at the site root until it is deleted by hand.
+      # M1's deployed file set is fixed and wholly produced by `make demo`
+      # (index.html, styles.css, boot.js, wasm_exec.js, agentiq.wasm,
+      # vendor/**), so the exposure is a stale vendored file, not a broken
+      # page. Switching to JamesIves/github-pages-deploy-action would restore
+      # exact semantics at the cost of §13.1's pinned action and §13.3's
+      # ".nojekyll is added automatically" — an owner's call, not this
+      # workflow's.
+      - name: Deploy to gh-pages
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./demo/dist
+          keep_files: true
+          # §13.1. Also load-bearing beyond history: `force_orphan: true`
+          # rewrites gh-pages to a single commit — which would discard every
+          # preview directory that keep_files just protected — and switches the
+          # push to `--force`, which pr-preview-action's README warns destroys
+          # concurrent preview deployments.
+          force_orphan: false

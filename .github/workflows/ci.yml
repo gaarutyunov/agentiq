@@ -1,0 +1,147 @@
+# SPEC.md §18.1. Every step invokes the matching `make` target rather than
+# repeating its commands, so the gate a developer runs (`make verify`, §16) and
+# the gate CI runs cannot drift. The steps stay separate — §18.1 enumerates
+# them — because a single `make verify` reports as one opaque red X, and
+# `browser-test` in particular has to be readable from the job list.
+#
+# Note the discrepancy between §16 ("`make verify` is the single command. CI
+# runs exactly this.") and §18.1, whose step list also includes the §17.4 drift
+# test and the §18.3 size gate that `verify` does not depend on. This file
+# follows §18.1: it is the more specific statement, and both of the extra steps
+# are real gates.
+name: CI
+
+on: [push, pull_request]
+
+# §18.1 has no `permissions:` block, so it would inherit the repository
+# default. Nothing in this job writes to the repository — deploy.yml and
+# pr-preview.yml are the workflows that do — so it is read-only here.
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # go.mod's line is `go 1.25.0`; '1.25' resolves to the newest 1.25.x.
+      # GOTOOLCHAIN is deliberately left at its `auto` default: with a 1.25.x
+      # toolchain selected here, `auto` keeps it, and pinning a patch release
+      # would freeze the module to a toolchain go.mod does not require.
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+
+      # §17.1: the stock golangci-lint-action does not load module plugins, so
+      # using it would silently skip the determinism analyzer — the one check
+      # with no off-the-shelf substitute. v2.6.0 is what .custom-gcl.yml pins.
+      - name: Install golangci-lint
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.0
+
+      - name: Build custom linter
+        run: golangci-lint custom
+
+      # §17.3. gopgql generation is hermetic, so a non-empty diff means the
+      # checked-in output is stale.
+      - name: Generated code is current
+        run: make generate-check
+
+      - name: Lint
+        run: make lint-host
+
+      # §17.2's `no-js-outside-wasmpg` evaluates zero files on a host run: a
+      # file importing syscall/js must carry a `js && wasm` constraint to
+      # compile, and golangci-lint skips build-constrained files. Without this
+      # step the rule reports clean because it examined nothing.
+      - name: Lint (js/wasm)
+        run: make lint-wasm
+
+      # analyzer/ is a second Go module — forced by .custom-gcl.yml's
+      # `path: ./analyzer` (§17.1) — so neither `./bin/custom-gcl run ./...`
+      # nor `go test ./...` from the root reaches it.
+      - name: Lint (analyzer module)
+        run: make lint-analyzer
+
+      - name: Unit tests
+        run: make test-unit
+
+      # §14.2: the suites start `postgres:19beta2` and toxiproxy through
+      # testcontainers, against the Docker daemon present on ubuntu-latest.
+      - name: Integration tests
+        run: make test-integration
+
+      # §17.4. Introspects `dbos.*` in a live container and compares the column
+      # set against test/drift/testdata/dbos_schema.json, cut against the
+      # pinned DBOS v1.0.0. DBOS adds columns; the read-only projection is
+      # updated deliberately, not discovered in production.
+      #
+      # `make test-integration` above already ran this — `./test/...` matches
+      # `./test/drift`. §18.1 lists it as its own step anyway and that is worth
+      # keeping: drift is the one failure here that means "update the
+      # projection", not "fix the code", and a named step says so from the job
+      # list without opening a log.
+      - name: DBOS schema drift
+        run: make test-drift
+
+      - name: WASM build
+        run: make demo
+
+      # §18.3, gated at 40 MiB. See the target: §18.1's `stat -c%s` is GNU-only
+      # and the recipe uses portable `wc -c`, reporting the measured size.
+      - name: WASM size gate
+        run: make wasm-size
+
+      # §14.4/§16. The suite drives the *deployed* page and skips when
+      # AGENTIQ_PREVIEW_URL is unset, so on most runs failure-matrix rows F20,
+      # F21 and F22 do not execute. §18.1 never says where that URL comes from
+      # — a real gap, since pr-preview.yml (§13.2) is a separate workflow with
+      # no ordering guarantee against this one. The step below resolves the URL
+      # when a preview happens to be live and, when it is not, annotates the
+      # run rather than reporting a green browser step that ran nothing.
+      - name: Resolve preview URL
+        id: preview
+        env:
+          EVENT: ${{ github.event_name }}
+          PR: ${{ github.event.pull_request.number }}
+          OWNER: ${{ github.repository_owner }}
+        run: |
+          set -uo pipefail
+          if [ "$EVENT" = "pull_request" ]; then
+            url="https://${OWNER}.github.io/agentiq/pr-preview/pr-${PR}/"
+          else
+            url="https://${OWNER}.github.io/agentiq/"
+          fi
+          if curl -fsSL --max-time 30 -o /dev/null "$url"; then
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+            {
+              echo "### Browser suite target"
+              echo
+              echo "Running against \`$url\`."
+              echo
+              echo "**Caveat:** pr-preview.yml is a separate workflow triggered by the same"
+              echo "\`synchronize\` event as this one, so the page reachable at that URL may still"
+              echo "be the *previous* commit's build. A green browser step means the deployed"
+              echo "preview passes, not necessarily that this commit's preview does."
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "url=" >> "$GITHUB_OUTPUT"
+            echo "::warning title=Browser suite has no target::$url is not reachable. Failure-matrix rows F20, F21 and F22 did NOT execute on this run (SPEC.md §19)."
+            {
+              echo "### Browser suite skipped"
+              echo
+              echo "\`$url\` is not reachable, so \`AGENTIQ_PREVIEW_URL\` is unset and the suite skipped."
+              echo "**Failure-matrix rows F20, F21 and F22 did not execute** (SPEC.md §19)."
+              echo
+              echo "This is expected before the first preview deploy of a pull request, and on any"
+              echo "run that precedes pr-preview.yml. It is not a pass."
+            } >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # `-v` (in the make target) is what makes a whole-suite skip legible:
+      # without it a skip prints as `ok`, indistinguishable from three passing
+      # scenarios.
+      - name: Browser tests
+        env:
+          AGENTIQ_PREVIEW_URL: ${{ steps.preview.outputs.url }}
+        run: make browser-test
