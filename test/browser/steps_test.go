@@ -38,10 +38,22 @@ const (
 	// refresh loop for one PGlite backend.
 	workflowTimeout = 3 * time.Minute
 
-	// evalTimeout bounds one round trip to the tab. It is generous because the
-	// Go runtime and the page share a thread: an Evaluate issued while the wasm
-	// module is doing something long waits for it.
-	evalTimeout = 45 * time.Second
+	// evalTimeout bounds one round trip to the tab.
+	//
+	// It is a *queue* bound, not a latency expectation, and that distinction is
+	// what makes it this large. Runtime.evaluate is serviced on the page's main
+	// thread, which the Go runtime and PGlite's wasm module both occupy in long
+	// synchronous stretches; a read issued during one of those is answered when
+	// the thread yields. A bound shorter than the longest stretch does not
+	// observe a slow page, it *abandons* the read — and because the next poll
+	// issues a fresh one that is abandoned in turn, the suite can never see a
+	// page that is working perfectly well.
+	//
+	// That is not hypothetical. At 45 seconds this suite's first run against
+	// the deployed preview spent its entire eight-minute boot budget on
+	// consecutive `context deadline exceeded` reads, and reported the page as
+	// never having published window.agentiq when it had.
+	evalTimeout = 2 * time.Minute
 
 	// pollInterval is how often the page's state is re-read. The runtime
 	// republishes it on every change, so this only decides how quickly the
@@ -70,6 +82,33 @@ type suite struct {
 func (s *suite) before(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
 	s.tab, s.cancelTab = chromedp.NewContext(s.browser)
 	s.workflowID = ""
+
+	// Open the tab here, on the tab's own context, and not incidentally on
+	// whichever context the first action happens to carry.
+	//
+	// chromedp allocates a tab's target lazily, on the first chromedp.Run
+	// against its context, and starts the goroutine that reads that target's
+	// CDP replies with *that* Run's context (chromedp.go: attachTarget does
+	// `go c.Target.run(ctx)`). Every action here is given a deadline, so if the
+	// first one is also the one that opens the tab, the reply pump inherits
+	// that deadline — and when it expires, or its `defer cancel()` fires, the
+	// pump exits while the tab stays open.
+	//
+	// The result is a tab that accepts commands and answers none of them: the
+	// navigation lands, the page boots perfectly well, and every subsequent
+	// read waits for a reply that nothing is left to deliver. That is not a
+	// hypothesis about this suite. It is what this suite did, four runs in a
+	// row, against a page that a standalone driver of identical shape boots in
+	// under thirty seconds — first as "boot.js never published window.agentiq",
+	// then as an eight-minute navigation, then as a page that "never answered
+	// at all" while a plain read of the state element timed out beside it.
+	//
+	// A bare Run with no actions is enough to open the tab, and s.tab is
+	// cancelled in [suite.after], so the pump lives exactly as long as the
+	// scenario does.
+	if err := chromedp.Run(s.tab); err != nil {
+		return ctx, fmt.Errorf("open a tab for the scenario: %w", err)
+	}
 	return ctx, nil
 }
 
