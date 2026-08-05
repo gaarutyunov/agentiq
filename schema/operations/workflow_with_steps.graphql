@@ -1,0 +1,24 @@
+# The M1 acceptance traversal (SPEC.md section 16): a workflow with its steps,
+# over the read-only projection of dbos.*. Fixed depth -- SQL/PGQ in PG19 has
+# no variable-length paths (SPEC.md section 3.3).
+#
+# The root field is the physical table name, which is what gopgql v0.2.0 names
+# a queryable root: workflow_status, operation_outputs, streams.
+#
+# Keep this file ASCII. gopgql v0.2.0 corrupts the parse of an operation
+# document that carries a multi-byte character ahead of the operation body.
+query WorkflowWithSteps($workflowUuid: ID!) {
+  workflow_status(workflowUuid: $workflowUuid) {
+    workflowUuid
+    status
+    name
+    queueName
+    createdAt
+    steps {
+      functionId
+      functionName
+      output
+      error
+    }
+  }
+}

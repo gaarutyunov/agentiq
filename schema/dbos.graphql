@@ -1,0 +1,125 @@
+# Read-only projection of the `dbos.*` schema (SPEC.md §7.3).
+#
+# DBOS owns these tables and migrates them with `dbos migrate`. Every type here
+# is `@readonly`, so gopgql emits no CREATE TABLE, no ALTER, no DROP and no
+# index for them — only the property-graph mapping and the read model.
+#
+# The directive vocabulary and the DateTime / JSON scalars are supplied by
+# gopgql's own prelude and must not be redeclared here: declaring them is a
+# duplicate-definition error. SPEC.md §7.1's preamble names an idealised
+# vocabulary (`@table`, `@vertex`, `@edge`); the vocabulary gopgql v0.2.0
+# actually implements is `@node`, `@key`, `@relationship`, and it is what this
+# document uses. The mapping is one-to-one:
+#
+#   @table(name:, schema:)  ->  @node(label:, table:, schema:)
+#   @vertex(key: [cols])    ->  @key(fields: [graphql field names])
+#   @edge(from:, to:, label:) -> @relationship(type:, direction:,
+#                                              table:, schema:,
+#                                              sourceKey:, destKey:)
+#
+# `@key(fields:)` takes GraphQL field names; `sourceKey:`/`destKey:` take
+# physical column names of the *edge* table.
+#
+# SPEC.md §7.1 also declares a `JSONB` scalar. gopgql's prelude has `JSON`
+# only, so a column that is physically `jsonb` is `JSON @column(type: "jsonb")`.
+# For a @readonly type the physical type is never emitted as DDL; it only tells
+# the compiler how to shape the value back.
+#
+# `Workflow.session` (SPEC.md §7.3's HAS_SESSION edge) is deliberately absent:
+# `Session` lives in `schema/agentiq.graphql`, which does not exist until M2.
+#
+# SPEC.md §7.3 also writes `parent` and `childWorkflow` as to-one fields.
+# gopgql v0.2.0 refuses a non-list `@relationship` field ("@relationship fields
+# must be list types"), so both are `[Workflow!]!` here — a list that holds at
+# most one element. It has no cardinality directive to say otherwise.
+#
+# KNOWN GAP — `HAS_STEP` is missing from the generated property graph, and the
+# generated `WorkflowWithSteps` query therefore cannot run. gopgql v0.2.0's
+# `collectEdges` deduplicates edges by physical table name rather than by
+# relationship label, so of the two edges mapped onto `dbos.operation_outputs`
+# — `HAS_STEP` here and `SPAWNED` on `Step` — only one survives, silently and
+# with exit status 0. Which one survives depends on type iteration order;
+# today it is `SPAWNED`.
+#
+# Both edges are declared here anyway, because this document is the contract
+# and the defect is gopgql's. Do not delete one to make the output look right:
+# `HAS_STEP` is the traversal SPEC.md §16's M1 acceptance is written against.
+
+type Workflow
+  @node(label: "workflow", table: "workflow_status", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid"]) {
+  workflowUuid:     ID!       @column(name: "workflow_uuid")
+  status:           String!
+  name:             String!
+  queueName:        String    @column(name: "queue_name")
+  createdAt:        DateTime! @column(name: "created_at")
+  updatedAt:        DateTime! @column(name: "updated_at")
+  recoveryAttempts: Int       @column(name: "recovery_attempts")
+  attributes:       JSON      @column(type: "jsonb")
+  inputs:           JSON      @column(type: "json")
+  output:           JSON      @column(type: "json")
+  error:            JSON      @column(type: "json")
+
+  steps: [Step!]! @relationship(
+    type: "HAS_STEP", direction: OUT
+    table: "operation_outputs", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["workflow_uuid", "function_id"]
+  )
+
+  parent: [Workflow!]! @relationship(
+    type: "PARENT", direction: OUT
+    table: "workflow_status", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["parent_workflow_id"]
+  )
+
+  streams: [StreamValue!]! @relationship(
+    type: "EMITTED", direction: OUT
+    table: "streams", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["workflow_uuid", "key", "offset"]
+  )
+}
+
+type Step
+  @node(label: "step", table: "operation_outputs", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid", "functionId"]) {
+  workflowUuid: ID!    @column(name: "workflow_uuid")
+  functionId:   Int!   @column(name: "function_id")
+  functionName: String @column(name: "function_name")
+  output:       JSON   @column(type: "json")
+  error:        JSON   @column(type: "json")
+
+  childWorkflow: [Workflow!]! @relationship(
+    type: "SPAWNED", direction: OUT
+    table: "operation_outputs", schema: "dbos"
+    sourceKey: ["workflow_uuid", "function_id"], destKey: ["child_workflow_id"]
+  )
+}
+
+type StreamValue
+  @node(label: "stream_value", table: "streams", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid", "key", "seq"]) {
+  workflowUuid: ID!     @column(name: "workflow_uuid")
+  key:          String!
+  seq:          Int!    @column(name: "offset") # `offset` is reserved; quoted
+  value:        JSON    @column(type: "json")
+  functionId:   Int     @column(name: "function_id")
+}
+
+type Mutation {
+  # SPEC.md §7.4. DBOS exposes enqueue, not direct start: every externally
+  # triggered run passes through a DBOS queue. `queue`'s GraphQL default is
+  # "agent"; an argument the operation does not pass is left out of the call
+  # entirely, so the function's own SQL DEFAULT applies (passing null sends
+  # NULL, which is a different thing).
+  startAgentRun(
+    agentDigest: String! @column(name: "agent_digest")
+    userId: String! @column(name: "user_id")
+    input: JSON! @column(name: "input")
+    queue: String = "agent" @column(name: "queue")
+    deduplicationId: String @column(name: "deduplication_id")
+    priority: Int @column(name: "priority")
+  ): String! @function(schema: "dbos", name: "enqueue_workflow")
+}
