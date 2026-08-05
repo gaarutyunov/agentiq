@@ -65,11 +65,21 @@ Feature: Browser runtime
   # and only F21's polling fallback keeps the demo alive — a demo that works for
   # the wrong reason.
   #
-  # The probe runs against a second, throwaway in-memory PGlite so it cannot
-  # disturb the demo's own database. It is an assertion, not a diagnostic: it
-  # fails when the shipped default contradicts what the real bundle does.
+  # The measurement is the page's own (demo/wasm/probe.go): LISTEN on one
+  # logical connection, NOTIFY on another, run at boot before dbos.Launch takes
+  # a connection for its listener. Both counts come off the tap in
+  # demo/wasm/pglite.go — one in the onNotification subscription, one over the
+  # raw bytes execProtocol returned — so neither is downstream of the routing
+  # decision being checked, and the same probe additionally reports whether pgx
+  # received the notification end to end with the shipped default in force.
+  # That is strictly more than a throwaway PGlite driven from injected
+  # JavaScript can say, and it needs no second database in the tab.
+  #
+  # It is a regression guard rather than a discovery. The answer is known — both
+  # paths carry the notification, so dropping the inline copy drops a duplicate
+  # — and this fails the day a PGlite bundle stops agreeing with the default
+  # wasmpg ships.
   Scenario: Inline notification routing matches the shipped default
-    Given a throwaway in-memory PGlite instance
-    When a notification is raised on a channel that instance is listening to
-    Then the onNotification callback receives it
+    Given the runtime's notification probe has run
+    Then the onNotification callback received the notification
     And wasmpg.Config.RouteInlineNotifications is correct for that behaviour

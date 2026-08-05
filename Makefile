@@ -92,8 +92,16 @@ demo:
 # skip prints as `ok`, which is indistinguishable from three passing scenarios.
 # Failure-matrix rows F20, F21 and F22 live here; a run that executed none of
 # them must say so.
+#
+# `-timeout` is not in §16's recipe either, and without it the suite cannot
+# finish. `go test` defaults to ten minutes; the deployed page takes about two
+# and a quarter minutes to load on a cold HTTP cache, and five scenarios plus
+# their workflow runs do not fit. The default is a panic with a goroutine dump,
+# not a failing scenario, so the run would read as a crash rather than as the
+# budget being wrong. `test/browser` sets its own 40-minute ceiling on the
+# scenarios, and this leaves it room to report before Go's bound fires.
 browser-test:
-	go test ./test/browser -tags=browser -v
+	go test ./test/browser -tags=browser -v -timeout 45m
 
 # --- lint passes ------------------------------------------------------------
 

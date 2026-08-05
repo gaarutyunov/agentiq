@@ -20,6 +20,17 @@ import (
 // (SPEC.md §13.2).
 const PreviewURLEnv = "AGENTIQ_PREVIEW_URL"
 
+// suiteTimeout bounds the whole feature.
+//
+// The first scenario loads 15 MB of wasm and data images over the network and
+// takes about three minutes to reach ready on an idle machine; every scenario
+// after it finds the assets in the browser's cache and takes about twelve
+// seconds. Five scenarios therefore cost four or five minutes in total, and
+// this is a ceiling rather than an estimate: it exists so that a suite which
+// has gone wrong stops and reports, and it is set high enough that a busy
+// runner is never the thing that trips it.
+const suiteTimeout = 40 * time.Minute
+
 // TestBrowserRuntime runs features/browser_runtime.feature against the
 // deployed demo.
 func TestBrowserRuntime(t *testing.T) {
@@ -29,7 +40,7 @@ func TestBrowserRuntime(t *testing.T) {
 			"Set it to the Pages URL or a PR preview URL (SPEC.md §13.2).", PreviewURLEnv)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), suiteTimeout)
 	t.Cleanup(cancel)
 
 	// One browser for the suite. Each scenario gets its own tab, because the
@@ -65,18 +76,17 @@ func (s *suite) initialize(sc *godog.ScenarioContext) {
 
 	sc.Step(`^the deployed demo page$`, s.theDeployedPage)
 	sc.Step(`^the PGlite notification callback is suppressed$`, s.suppressNotifications)
-	sc.Step(`^a throwaway in-memory PGlite instance$`, s.aThrowawayPGlite)
+	sc.Step(`^the runtime's notification probe has run$`, s.theProbeHasRun)
 
 	sc.Step(`^a workflow is started from the browser$`, s.aWorkflowIsStarted)
 	sc.Step(`^invalid SQL is executed from the browser$`, s.invalidSQLIsExecuted)
 	sc.Step(`^the tab is reloaded before the workflow completes$`, s.theTabIsReloaded)
-	sc.Step(`^a notification is raised on a channel that instance is listening to$`, s.aNotificationIsRaised)
 
 	sc.Step(`^dbos\.workflow_status contains one row with status SUCCESS$`, s.oneRowWithStatusSuccess)
 	sc.Step(`^the property graph returns the workflow with its steps$`, s.theGraphReturnsSteps)
 	sc.Step(`^the page reports a pgx error$`, s.thePageReportsAPgxError)
 	sc.Step(`^the error carries a SQLSTATE$`, s.theErrorCarriesASQLSTATE)
 	sc.Step(`^the workflow is still known after the reload$`, s.theWorkflowSurvivesTheReload)
-	sc.Step(`^the onNotification callback receives it$`, s.theCallbackReceivesIt)
+	sc.Step(`^the onNotification callback received the notification$`, s.theCallbackReceivedTheNotification)
 	sc.Step(`^wasmpg\.Config\.RouteInlineNotifications is correct for that behaviour$`, s.routeInlineIsCorrect)
 }
