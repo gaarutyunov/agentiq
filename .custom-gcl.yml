@@ -9,7 +9,23 @@
 # into a filesystem replace and imports the package at the module root. That is
 # why analyzer/ has its own go.mod declaring the same module path as the
 # repository — see analyzer/plugin.go.
-version: v2.6.0
+#
+# The version is v2.7.2, not SPEC.md §17.1's v2.6.0. v2.6.0's `custom` builder
+# passes git a single argv element `"-c advice.detachedHead=false"` instead of
+# the two elements `"-c", "advice.detachedHead=false"`
+# (pkg/commands/internal/builder.go:95), so git parses the config key as
+# " advice.detachedHead" with a leading space. git <= 2.47 silently trimmed it;
+# git 2.54.0 — what ubuntu-latest ships — rejects it:
+#
+#   error: invalid key:  advice.detachedHead
+#   fatal: unable to write parameters to config file
+#
+# which surfaces as the opaque `clone golangci-lint: ... exit status 128`.
+# Upstream fixed it in v2.7.0; v2.7.2 is that line's patch tip. Both this
+# `version` and ci.yml's `go install ...@` must move together — the bug is in
+# the *installed* binary that runs `custom`, while this field only selects what
+# it clones — and §18.1's comment ties the two to each other.
+version: v2.7.2
 name: custom-gcl
 destination: ./bin
 plugins:

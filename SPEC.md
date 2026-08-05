@@ -1366,13 +1366,20 @@ DBOS ships nothing equivalent.
 
 ```yaml
 # .custom-gcl.yml
-version: v2.6.0
+version: v2.7.2
 name: custom-gcl
 destination: ./bin
 plugins:
   - module: github.com/gaarutyunov/agentiq
     path: ./analyzer
 ```
+
+The pin is v2.7.2, revised up from v2.6.0. v2.6.0's `golangci-lint custom`
+builds a malformed `git clone` — `"-c advice.detachedHead=false"` as one
+argument rather than two — which git 2.54.0, the version on `ubuntu-latest`,
+rejects as an invalid config key. Older git silently accepted it, so the pin
+worked when it was chosen. Upstream fixed it in v2.7.0. The installed binary
+(§18.1) and this field must carry the same version.
 
 Because the stock `golangci-lint-action` does not run custom module linters, CI
 builds `custom-gcl` explicitly (§18.1).
@@ -1438,7 +1445,7 @@ jobs:
       - uses: actions/setup-go@v5
         with: { go-version: '1.25' }
       - name: Install golangci-lint
-        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.6.0
+        run: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.2
       - name: Build custom linter
         run: golangci-lint custom
       - name: Generated code is current
