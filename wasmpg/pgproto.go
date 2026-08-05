@@ -22,9 +22,20 @@ const (
 	beReadyForQuery        = 'Z'
 	beErrorResponse        = 'E'
 
-	// readyIdle is the ReadyForQuery transaction status meaning "idle, not in
-	// a transaction block" — what a freshly synthesised handshake reports.
-	readyIdle = 'I'
+	// The ReadyForQuery transaction-status bytes. This is the backend's own
+	// report of where the session stands, and it is what the multiplexer keys
+	// its one-in-flight lock off: 'I' is the only one of the three that means
+	// the shared session is free for another logical connection to use.
+	//
+	//   - readyIdle is what a freshly synthesised handshake reports.
+	//   - readyInTx means a transaction block is open, including one that is
+	//     only open because of a SAVEPOINT.
+	//   - readyFailedTx means the block is open but has failed, so every
+	//     statement in it errors until it is rolled back. It is still an open
+	//     block, and still not free.
+	readyIdle     = 'I'
+	readyInTx     = 'T'
+	readyFailedTx = 'E'
 
 	// sslRefused is the bare byte, with no length and no framing, that
 	// answers an SSLRequest on a server built without SSL support
@@ -196,6 +207,55 @@ func encodeBackendKeyData(pid, secret int32) []byte {
 
 func encodeReadyForQuery(status byte) []byte {
 	return encodeBackend(beReadyForQuery, []byte{status})
+}
+
+// encodeQuery frames a simple Query ('Q') message.
+//
+// A frontend message has the same type-byte/length/payload shape as a backend
+// one, so encodeBackend builds it. This is the only statement the shim sends to
+// PGlite on its own behalf rather than forwarding one pgx wrote — see
+// [Conn.rollbackSession].
+func encodeQuery(sql string) []byte {
+	return encodeBackend(feQuery, appendCString(nil, sql))
+}
+
+// rollbackQuery is the statement that returns the shared PGlite session to an
+// idle state after a logical connection abandoned a transaction in it.
+//
+// It is a function rather than a package-level slice because the bytes are
+// handed to an [ExecProtocol] the package does not own, and a caller that
+// retained or edited them would corrupt every later rollback.
+func rollbackQuery() []byte { return encodeQuery("ROLLBACK") }
+
+// lastReadyForQuery reports the transaction-status byte of the final
+// ReadyForQuery frame in a backend byte stream.
+//
+// The final one is what counts. A single execProtocol round trip can carry a
+// whole batch, so `COMMIT; BEGIN;` answers with an 'I' followed by a 'T', and
+// only the second describes the state the session was left in. Reading the
+// first — or worse, guessing from the statement text — would hand the backend
+// to another connection in the middle of the transaction that is still open.
+//
+// ok is false when the stream carries no ReadyForQuery at all, which is what an
+// extended-query batch whose Sync has not arrived yet looks like.
+func lastReadyForQuery(buf []byte) (status byte, ok bool) {
+	for i := 0; i < len(buf); {
+		typ, total, valid := nextBackendMessage(buf[i:])
+		if !valid {
+			// Framing is lost, so nothing further can be read reliably.
+			// Reporting what was seen so far is wrong in the safe direction:
+			// no ReadyForQuery means "assume the session is still busy".
+			break
+		}
+		// A ReadyForQuery is exactly one byte of payload behind a five-byte
+		// header. Anything else claiming to be one is malformed and ignored
+		// rather than indexed into.
+		if typ == beReadyForQuery && total == 6 {
+			status, ok = buf[i+5], true
+		}
+		i += total
+	}
+	return status, ok
 }
 
 // encodeNotificationResponse builds the 'A' frame the multiplexer injects into

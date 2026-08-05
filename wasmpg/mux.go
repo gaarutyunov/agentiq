@@ -128,7 +128,7 @@ type Multiplexer struct {
 
 	routeInline bool
 
-	// backend is held only across a single execProtocol round trip.
+	// backend is held for the length of a transaction — see submit.
 	backend fifoLock
 
 	mu      sync.Mutex
@@ -286,15 +286,57 @@ func (m *Multiplexer) Close() error {
 }
 
 // submit runs one execProtocol round trip on behalf of c, holding the
-// one-in-flight lock for its duration and no longer.
+// one-in-flight lock until the backend reports the shared session is idle.
+//
+// # Why the lock outlives the round trip
+//
+// PGlite is one backend *session*, and a transaction is session-scoped state.
+// Releasing the lock after every round trip lets another logical connection's
+// traffic land between a BEGIN and its COMMIT, where it joins the transaction
+// it never opened. DBOS notices first, because it wraps each step in a
+// savepoint: the interleaved statement leaves the session outside the block and
+// the step dies with `RELEASE SAVEPOINT can only be used in transaction
+// blocks`. The workflow then reports SUCCESS having recorded no steps at all.
+//
+// So the unit the lock guards is a transaction, not a round trip.
+//
+// # Why the backend's status byte is the signal, and not the statement text
+//
+// The obvious implementation watches BEGIN / COMMIT / ROLLBACK go past in the
+// write path, the way observeListen watches LISTEN. That parser exists and is
+// careful, but it is the wrong instrument here, for four reasons:
+//
+//  1. An error inside a transaction aborts it without the client sending
+//     anything. A frontend-only watcher sees no COMMIT and no ROLLBACK, holds
+//     the lock forever, and wedges the multiplexer.
+//  2. SAVEPOINT, RELEASE and ROLLBACK TO nest, so a watcher would have to track
+//     depth — and get `ROLLBACK TO x` (still inside the block) apart from
+//     `ROLLBACK` (not) to do it.
+//  3. pgx sends BEGIN through the extended protocol as readily as the simple
+//     one, and may send it as a parameterised statement.
+//  4. One round trip can carry a batch: `COMMIT; BEGIN;` ends inside a
+//     transaction, and the last thing said about it is not the state it is in.
+//
+// ReadyForQuery's transaction-status byte answers all four in one, because it
+// is the backend reporting what it actually did — 'I' idle, 'T' in a
+// transaction, 'E' in a failed one. Reading the last one in the reply
+// (lastReadyForQuery) makes the batch case free and the savepoint case free:
+// a session inside a savepoint reports 'T' like any other open block.
+//
+// A reply carrying no ReadyForQuery is treated as "still busy". That is an
+// extended-query batch whose Sync has not arrived — pgx can write
+// Parse/Bind/Describe/Execute in one call and Sync in the next — and letting
+// another connection in between the halves is the same interleaving.
 func (m *Multiplexer) submit(ctx context.Context, c *Conn, msg []byte) error {
-	if err := m.backend.acquire(ctx, c.done); err != nil {
+	if err := c.beginRoundTrip(ctx); err != nil {
 		return err
 	}
-	defer m.backend.release()
 
 	out, err := m.exec(ctx, msg)
 	if err != nil {
+		// The backend never reported its transaction status, so the session may
+		// have been left inside a block. endRoundTrip rolls it back.
+		c.endRoundTrip(sessionUnknown)
 		return err
 	}
 
@@ -307,7 +349,22 @@ func (m *Multiplexer) submit(ctx context.Context, c *Conn, msg []byte) error {
 			m.Notify(n.channel, n.payload)
 		}
 	}
+
+	// Last: everything this round trip owed its own connection is done before
+	// the backend is handed to the next one. The status is read from the raw
+	// reply rather than from clean, because that is what the backend said.
+	c.endRoundTrip(sessionOutcome(out))
 	return nil
+}
+
+// sessionOutcome classifies what a backend reply says about the shared
+// session's transaction status.
+func sessionOutcome(out []byte) roundTripOutcome {
+	status, ok := lastReadyForQuery(out)
+	if !ok || status != readyIdle {
+		return sessionInTx
+	}
+	return sessionIdle
 }
 
 // apply updates the routing table from one observed LISTEN or UNLISTEN.

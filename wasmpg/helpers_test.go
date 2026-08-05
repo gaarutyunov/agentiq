@@ -76,10 +76,7 @@ func startupMessage(code int32, body []byte) []byte {
 }
 
 // query builds a simple Query ('Q') message.
-func query(sql string) []byte {
-	payload := appendCString(nil, sql)
-	return encodeBackend(feQuery, payload)
-}
+func query(sql string) []byte { return encodeQuery(sql) }
 
 // terminate builds a Terminate ('X') message.
 func terminateMsg() []byte {

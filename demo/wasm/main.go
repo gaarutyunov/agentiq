@@ -25,30 +25,42 @@
 //     generated `GRAPH_TABLE` traversal, which is SPEC.md §16's other M1
 //     acceptance.
 //
-// # Known gap: transactions are not isolated between logical connections
+// # Transaction isolation between logical connections
 //
-// Steps 1 to 6 all work in a real browser except the last part of 6: an
-// enqueued workflow reaches PENDING and its first step then fails with
+// Driving the deployed page used to show every step of 1 to 6 working except
+// the last part of 6: an enqueued workflow reached PENDING, its first step
+// failed with
 //
 //	failed to release savepoint: RELEASE SAVEPOINT can only be used in
 //	transaction blocks
 //
-// This is not a bug in this file, and no setting in pool.go fixes it. PGlite is
-// one backend *session*, and SPEC.md §12.4's multiplexer gives N logical
-// connections a share of it. Session-scoped state is therefore shared, and a
-// transaction is session-scoped state: connection A opens one, connection B
-// commits or rolls back, and A's savepoint is gone. Reducing the budget does
-// not help — with two connections the session ends up in an aborted
-// transaction that nothing can leave, and every subsequent statement fails with
-// `current transaction is aborted`.
+// and the workflow then reported SUCCESS having recorded no steps at all.
 //
-// The fix belongs in `wasmpg`, which already has the machinery for it: it
-// observes LISTEN and UNLISTEN going past in the write path (`observeListen`),
-// and the same observation of BEGIN / COMMIT / ROLLBACK would let it hold its
+// It was never a bug in this file, and no setting in pool.go could fix it.
+// PGlite is one backend *session*, and SPEC.md §12.4's multiplexer gives N
+// logical connections a share of it. Session-scoped state is therefore shared,
+// and a transaction is session-scoped state: connection A opens one, connection
+// B commits or rolls back, and A's savepoint is gone.
+//
+// The fix is in `wasmpg`, where it belonged: the multiplexer now holds its
 // one-in-flight lock for the length of a transaction rather than for one round
-// trip. That serialises transactions instead of interleaving them, and it also
-// closes the prepared-statement race pool.go describes. It is a transport
-// change, so it is recorded here rather than worked around.
+// trip, keyed off the backend's own ReadyForQuery transaction-status byte
+// ('I' idle, 'T' in a transaction, 'E' in a failed one) rather than off a
+// parser watching BEGIN and COMMIT go past. See [wasmpg.Multiplexer]'s submit
+// for why the status byte and not the statement text.
+//
+// Two things about that are worth knowing here rather than rediscovering:
+//
+//   - The serialisation is asserted off-target, in `wasmpg`'s own suite, which
+//     runs without a browser because the backend is an `ExecProtocol` function
+//     value. What that proves is that the shim never hands the session on while
+//     the backend reports a transaction open, and rolls one back that a
+//     connection abandoned. Whether the workflow now records its steps is a
+//     question only a real PGlite can answer, and test/browser is what asks it.
+//   - It does *not* close the prepared-statement race pool.go describes. That
+//     race is between two Parse/Execute pairs, each of which leaves the session
+//     idle, so a transaction-scoped lock does not cover it. pool.go's
+//     QueryExecModeCacheDescribe is still the mitigation.
 package main
 
 import (

@@ -42,8 +42,29 @@ type Conn struct {
 	rem   []byte
 	ready chan struct{} // buffered(1) wake-up for a blocked Read
 
+	// hold is this connection's ownership of the one-in-flight lock. The lock
+	// is held for the length of a transaction, so ownership outlives a single
+	// round trip and has to survive a Close that arrives from another
+	// goroutine.
+	hold backendHold
+
 	rd *deadline
 	wd *deadline
+}
+
+// backendHold tracks whether a logical connection is sitting on the shared
+// PGlite session, and whether a round trip is running inside it right now.
+//
+// The two are separate because they end at different times: a transaction keeps
+// held true across the idle gaps between statements, while inFlight is true only
+// while execProtocol has not returned. A Close arriving during those idle gaps
+// must hand the session back; one arriving mid-round-trip must not, or it pulls
+// the backend out from under a call that is still going.
+type backendHold struct {
+	mu       sync.Mutex
+	held     bool
+	inFlight bool
+	closing  bool
 }
 
 func newConn(m *Multiplexer, pid int32) *Conn {
@@ -269,6 +290,135 @@ func (c *Conn) handleLocally(msg frontendMessage, flush func() error) (bool, err
 	}
 }
 
+// roundTripOutcome says what a finished round trip left the shared session in.
+type roundTripOutcome int
+
+const (
+	// sessionIdle: the backend reported ReadyForQuery('I'). Nothing is open,
+	// and the next logical connection can have the backend.
+	sessionIdle roundTripOutcome = iota
+
+	// sessionInTx: the backend reported 'T' or 'E', or reported nothing at all.
+	// A transaction block is open — or a batch is half-written — so the
+	// connection keeps the backend.
+	sessionInTx
+
+	// sessionUnknown: the round trip itself failed, so the backend never said
+	// where it stands. The connection gives the backend up, but only behind a
+	// ROLLBACK.
+	sessionUnknown
+)
+
+// beginRoundTrip takes the one-in-flight lock for a round trip, unless this
+// connection is already holding it across an open transaction.
+//
+// Re-entering an existing hold without touching the lock is the whole point:
+// the second statement of a transaction must not queue behind the waiters that
+// piled up while the first one ran, or a transaction could never finish.
+func (c *Conn) beginRoundTrip(ctx context.Context) error {
+	c.hold.mu.Lock()
+	switch {
+	case c.hold.closing:
+		c.hold.mu.Unlock()
+		return c.closeErr()
+	case c.hold.held:
+		c.hold.inFlight = true
+		c.hold.mu.Unlock()
+		return nil
+	}
+	c.hold.mu.Unlock()
+
+	if err := c.m.backend.acquire(ctx, c.done); err != nil {
+		return err
+	}
+
+	c.hold.mu.Lock()
+	if c.hold.closing {
+		// The connection shut down while this call was queued for the lock.
+		// shutdown has already looked and found nothing held, so it will not
+		// look again: hand the lock straight on rather than record ownership
+		// nobody will ever release.
+		c.hold.mu.Unlock()
+		c.m.backend.release()
+		return c.closeErr()
+	}
+	c.hold.held = true
+	c.hold.inFlight = true
+	c.hold.mu.Unlock()
+	return nil
+}
+
+// endRoundTrip ends a round trip and decides whether this connection keeps the
+// backend.
+//
+// It keeps it for [sessionInTx] — that is the transaction isolation the shared
+// session cannot provide on its own — and gives it back otherwise. A close that
+// arrived mid-round-trip is honoured here rather than by shutdown, which saw
+// inFlight and left the session alone.
+func (c *Conn) endRoundTrip(outcome roundTripOutcome) {
+	c.hold.mu.Lock()
+	c.hold.inFlight = false
+	if outcome == sessionInTx && !c.hold.closing {
+		c.hold.mu.Unlock()
+		return
+	}
+	held := c.hold.held
+	c.hold.held = false
+	c.hold.mu.Unlock()
+
+	if !held {
+		return
+	}
+	if outcome != sessionIdle {
+		c.rollbackSession()
+	}
+	c.m.backend.release()
+}
+
+// abandonHold hands the shared session back when the connection goes away.
+//
+// Without it, a connection that closes between BEGIN and COMMIT — a deadline, a
+// Terminate, a torn frame — takes the only backend there is with it, and every
+// other logical connection blocks on the lock forever.
+func (c *Conn) abandonHold() {
+	c.hold.mu.Lock()
+	c.hold.closing = true
+	if c.hold.inFlight {
+		// A round trip is running. It will see closing when it ends and give
+		// the session back itself; releasing here would let another connection
+		// onto a backend that is still answering this one.
+		c.hold.mu.Unlock()
+		return
+	}
+	held := c.hold.held
+	c.hold.held = false
+	c.hold.mu.Unlock()
+
+	if !held {
+		return
+	}
+	c.rollbackSession()
+	c.m.backend.release()
+}
+
+// rollbackSession returns the shared PGlite session to an idle state.
+//
+// A real backend aborts an open transaction when the session that owns it ends.
+// Here the session outlives the logical connection — it outlives all of them —
+// so the rollback has to be issued explicitly, or the next connection to be
+// granted the backend silently finds itself inside somebody else's transaction.
+// When the session was idle anyway this is a no-op the backend answers with a
+// warning, which is cheaper than tracking a status that could be wrong.
+//
+// It runs on a background context on purpose: the context that brought us here
+// is usually the cancelled or expired one that caused the abandonment in the
+// first place, and skipping the cleanup because of it would wedge the session
+// for everybody else. The reply is discarded — it belongs to a round trip whose
+// caller has already been told the write failed.
+func (c *Conn) rollbackSession() {
+	_, _ = c.m.exec(context.Background(), rollbackQuery())
+}
+
 // consume drops n bytes from the front of the write buffer, resetting it once
 // it is empty so that a long-lived connection does not retain a slice that
 // only ever grows.
@@ -295,6 +445,10 @@ func (c *Conn) shutdown(cause error) {
 		c.closeE = cause
 		c.m.forget(c)
 		close(c.done)
+		// Last, and after close(c.done): a caller queued for the backend has
+		// to be able to give up before the session's ownership is settled, or
+		// abandonHold decides against a waiter that is still on its way in.
+		c.abandonHold()
 	})
 }
 
