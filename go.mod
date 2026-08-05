@@ -8,7 +8,7 @@ require (
 	github.com/chromedp/chromedp v0.14.2
 	github.com/cucumber/godog v0.16.0
 	github.com/dbos-inc/dbos-transact-golang v1.0.0
-	github.com/gaarutyunov/gopgql v0.2.1
+	github.com/gaarutyunov/gopgql v0.2.2
 	github.com/jackc/pgx/v5 v5.10.0
 	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1

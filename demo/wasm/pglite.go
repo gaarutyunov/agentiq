@@ -61,6 +61,35 @@ func newBackend(pglite js.Value) (*backend, error) {
 	return &backend{pglite: pglite, resultShapes: map[string]int{}}, nil
 }
 
+// execOptions is the second argument to `execProtocol`.
+//
+// `throwOnError: false` is the whole of it, and it is what makes a backend error
+// reach pgx as a backend error.
+//
+// PGlite's default is to reject the promise when the statement produced an
+// ErrorResponse. The bytes are not lost when it does — `execProtocolRaw` has
+// already returned them — but the rejection discards the result object and
+// hands the caller a JavaScript Error instead, whose message is the backend's
+// text and nothing else. That arrives here as a Go error out of [backend.exec],
+// which the multiplexer returns from submit and [wasmpg.Conn.Write] returns to
+// pgx, which reports it as `write failed: …`. pgx never sees an ErrorResponse
+// to decode, so there is no *pgconn.PgError and no SQLSTATE — which is
+// failure-matrix row F20 failing, and it failed exactly that way against the
+// deployed preview.
+//
+// With the flag off, `execProtocol` returns normally and `data` carries the
+// frames the backend really sent: the ErrorResponse with its true SQLSTATE, and
+// the ReadyForQuery that answers pgx's Sync. Both matter. Synthesising an
+// ErrorResponse here instead would have to invent a SQLSTATE, and omitting the
+// ReadyForQuery would leave pgx waiting for one; letting the real frames
+// through does neither.
+//
+// It also repairs the multiplexer's transaction tracking, which keys on the
+// ReadyForQuery status byte: a rejected exec produced no ReadyForQuery at all,
+// so a statement that failed inside a transaction left the session's status
+// unobserved.
+var execOptions = map[string]any{"throwOnError": false}
+
 // exec is the [wasmpg.ExecProtocol] the multiplexer runs on.
 //
 // It is `execProtocol` and never `execProtocolRaw` (D7, SPEC.md §12.2): the Raw
@@ -76,7 +105,7 @@ func (b *backend) exec(ctx context.Context, msg []byte) (out []byte, err error) 
 	buf := js.Global().Get("Uint8Array").New(len(msg))
 	js.CopyBytesToJS(buf, msg)
 
-	result, err := await(ctx, b.pglite.Call("execProtocol", buf))
+	result, err := await(ctx, b.pglite.Call("execProtocol", buf, execOptions))
 	if err != nil {
 		return nil, err
 	}
