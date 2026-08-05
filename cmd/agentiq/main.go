@@ -130,7 +130,7 @@ func serve(parent context.Context, addr string) error {
 // newHandler serves the process's liveness surface.
 //
 // The GraphQL API SPEC.md §4 places at `generated/gql/` is not served here and
-// is not hand-written here either. gopgql v0.2.0 generates a typed Go *client*
+// is not hand-written here either. gopgql v0.2.1 generates a typed Go *client*
 // (`generated/client/`) and a property graph, but no GraphQL server, and
 // SPEC.md §21 forbids hand-written GraphQL resolvers — so the API surface
 // waits on a gopgql server generator rather than on a resolver layer written

@@ -5,42 +5,27 @@ Everything in this directory except this file is written by
 `go generate ./...`; drift fails CI (SPEC.md §17.3). gopgql only ever writes
 numbered `.sql` files here, so this note survives regeneration.
 
-## The graph in `0001_dbos_graph_graph.sql` is incomplete. This is a gopgql bug, not a design choice.
+`0001_dbos_graph_graph.sql` creates `agentiq_graph` with three vertex elements
+and four edge elements. `HAS_STEP` (Workflow → Step) and `SPAWNED`
+(Step → Workflow) both map onto `dbos.operation_outputs`; two edge elements over
+one physical table is intentional and legal, and both are needed — `HAS_STEP` is
+SPEC.md §16's M1 traversal, `SPAWNED` is how a workflow reaches the children it
+started.
 
-**`HAS_STEP` is missing from `EDGE TABLES`.** `schema/dbos.graphql` declares
-four edges — `HAS_STEP`, `PARENT`, `EMITTED`, `SPAWNED`. Only three are here.
+## This directory is a goose history, and it is append-only from here on
 
-gopgql v0.2.0's `collectEdges` deduplicates edges by *physical table name*
-rather than by *relationship label* (its own doc comment says "one physical
-edge table per relationship label"). `HAS_STEP` (Workflow → Step) and
-`SPAWNED` (Step → Workflow) are both mapped onto `dbos.operation_outputs`, so
-the second one seen is discarded — silently, with exit status 0. Which one
-survives depends on type iteration order; today `SPAWNED` wins.
+SQL/PGQ has no `ALTER PROPERTY GRAPH`, so gopgql expresses any later change to
+the graph as a new drop migration plus a new create migration rather than by
+editing `0001` in place. That is correct once a migration has been applied
+anywhere, and it is why **you must not delete this directory to "start clean"** —
+that changes what a deployed database is migrated from, and goose would see a
+version it has already applied change underneath it.
 
-Consequences while the bug stands:
-
-- `generated/client/`'s `WorkflowWithSteps` compiles
-  `MATCH (v0 IS workflow) -[e0 IS "HAS_STEP"]-> (v1 IS step)` against an edge
-  that does not exist. It fails at **run time**, not at generate time.
-- SPEC.md §16's M1 acceptance — "a `GRAPH_TABLE` query over `dbos.*` returns a
-  workflow with its steps" — cannot pass.
-
-**Do not fix this by editing the SQL, and do not fix it by deleting one of the
-two edges from the SDL.** The SDL is the contract and it is correct. Both
-edges exist in `dbos.operation_outputs` and both are needed: `HAS_STEP` is the
-M1 traversal, `SPAWNED` is how a workflow reaches the children it started.
-Regenerate once gopgql emits both.
-
-**`go generate ./...` is also not re-runnable yet**, for a related reason in
-the same feature — gopgql cannot parse the `AS "<alias>"` edge clause it
-emits here when a table is both a vertex and an edge:
-
-```
-gopgql: migrate: read migration 1: ddl: expected "SOURCE KEY", got "AS" at offset 572
-```
-
-Offset 572 is `dbos.operation_outputs AS "SPAWNED"`. The first generation into
-an empty directory succeeds; every subsequent one exits 1. Deleting this
-directory to get around it is not a workaround — it is a goose history, and
-discarding it changes what a deployed database is migrated from. Details in
-`tools/generate.go`.
+The one exception has already been spent. `0001` was regenerated from empty
+once, on this branch, while no database had ever applied it and the branch was
+unmerged. What that discarded was a create-wrong / drop / create-right sequence:
+gopgql v0.2.0 emitted the first graph without `HAS_STEP` (gopgql#49), and
+regenerating under v0.2.1 appended the fix forward instead of correcting it.
+Keeping that would have shipped a known-broken step for every future environment
+to execute for no reason, and left a misleading `0001` for anyone reading the DDL
+to learn the schema. Once this branch merges, the reasoning no longer applies.

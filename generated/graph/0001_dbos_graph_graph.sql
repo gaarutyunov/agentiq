@@ -6,6 +6,9 @@ CREATE PROPERTY GRAPH agentiq_graph
     dbos.workflow_status KEY (workflow_uuid) LABEL workflow PROPERTIES (workflow_uuid, status, name, queue_name, created_at, updated_at, recovery_attempts, attributes, inputs, output, error)
   )
   EDGE TABLES (
+    dbos.operation_outputs AS "HAS_STEP" SOURCE KEY (workflow_uuid) REFERENCES workflow_status (workflow_uuid)
+            DESTINATION KEY (workflow_uuid, function_id) REFERENCES operation_outputs (workflow_uuid, function_id)
+            LABEL "HAS_STEP" PROPERTIES (workflow_uuid, function_id),
     dbos.operation_outputs AS "SPAWNED" SOURCE KEY (workflow_uuid, function_id) REFERENCES operation_outputs (workflow_uuid, function_id)
             DESTINATION KEY (child_workflow_id) REFERENCES workflow_status (workflow_uuid)
             LABEL "SPAWNED" PROPERTIES (workflow_uuid, function_id, child_workflow_id),

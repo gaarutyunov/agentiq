@@ -18,22 +18,12 @@
 // statements, so a client generated against a different name compiles fine and
 // then fails at run time against a graph that does not exist.
 //
-// KNOWN GAP — `go generate ./...` is not yet re-runnable, and the SPEC.md §17.3
-// CI gate (`go generate ./... && git diff --exit-code`) therefore cannot pass.
-// gopgql v0.2.0 cannot re-read the migration it just wrote:
-//
-//	gopgql: migrate: read migration 1: ddl: expected "SOURCE KEY", got "AS" at offset 572
-//	exit status 1
-//
-// Offset 572 is `dbos.operation_outputs AS "SPAWNED"`. gopgql's generator emits
-// an `AS "<alias>"` clause on any edge element whose table is also a vertex
-// element — which is the whole shape of an externally-owned schema like
-// `dbos.*` — and gopgql's own migration DDL reader does not accept that clause.
-// So the first generation succeeds and every subsequent one exits 1.
-//
-// This needs a fix in gopgql, not here. Deleting `generated/graph/` before
-// regenerating is not a workaround: the directory is a goose history, and
-// throwing it away changes what a deployed database is migrated from.
+// `generated/graph/` is a goose history, so the graph directive is append-only:
+// a run that finds the directory already matching the SDL writes nothing and
+// exits 0, and a run that finds it stale appends a drop plus a recreate rather
+// than rewriting what is there. Never delete the directory to "start clean" once
+// any database has applied a migration from it — that changes what a deployed
+// database is migrated from. See `generated/graph/README.md`.
 package tools
 
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../schema/dbos.graphql --dir ../generated/graph --name dbos_graph --graph agentiq_graph

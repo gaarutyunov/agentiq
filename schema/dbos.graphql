@@ -7,9 +7,9 @@
 # The directive vocabulary and the DateTime / JSON scalars are supplied by
 # gopgql's own prelude and must not be redeclared here: declaring them is a
 # duplicate-definition error. SPEC.md §7.1's preamble names an idealised
-# vocabulary (`@table`, `@vertex`, `@edge`); the vocabulary gopgql v0.2.0
-# actually implements is `@node`, `@key`, `@relationship`, and it is what this
-# document uses. The mapping is one-to-one:
+# vocabulary (`@table`, `@vertex`, `@edge`); the vocabulary gopgql actually
+# implements is `@node`, `@key`, `@relationship`, and it is what this document
+# uses. The mapping is one-to-one:
 #
 #   @table(name:, schema:)  ->  @node(label:, table:, schema:)
 #   @vertex(key: [cols])    ->  @key(fields: [graphql field names])
@@ -29,21 +29,16 @@
 # `Session` lives in `schema/agentiq.graphql`, which does not exist until M2.
 #
 # SPEC.md §7.3 also writes `parent` and `childWorkflow` as to-one fields.
-# gopgql v0.2.0 refuses a non-list `@relationship` field ("@relationship fields
-# must be list types"), so both are `[Workflow!]!` here — a list that holds at
-# most one element. It has no cardinality directive to say otherwise.
+# gopgql refuses a non-list `@relationship` field ("@relationship fields must be
+# list types"), so both are `[Workflow!]!` here — a list that holds at most one
+# element. It has no cardinality directive to say otherwise.
 #
-# KNOWN GAP — `HAS_STEP` is missing from the generated property graph, and the
-# generated `WorkflowWithSteps` query therefore cannot run. gopgql v0.2.0's
-# `collectEdges` deduplicates edges by physical table name rather than by
-# relationship label, so of the two edges mapped onto `dbos.operation_outputs`
-# — `HAS_STEP` here and `SPAWNED` on `Step` — only one survives, silently and
-# with exit status 0. Which one survives depends on type iteration order;
-# today it is `SPAWNED`.
-#
-# Both edges are declared here anyway, because this document is the contract
-# and the defect is gopgql's. Do not delete one to make the output look right:
-# `HAS_STEP` is the traversal SPEC.md §16's M1 acceptance is written against.
+# `HAS_STEP` (Workflow → Step) and `SPAWNED` (Step → Workflow) both map onto
+# `dbos.operation_outputs`. That is deliberate and gopgql ≥ v0.2.1 emits both as
+# distinct edge elements, keyed by relationship label rather than by physical
+# table. Do not delete one to make the DDL look tidier: `HAS_STEP` is the
+# traversal SPEC.md §16's M1 acceptance is written against, and `SPAWNED` is how
+# a workflow reaches the children it started.
 
 type Workflow
   @node(label: "workflow", table: "workflow_status", schema: "dbos")
