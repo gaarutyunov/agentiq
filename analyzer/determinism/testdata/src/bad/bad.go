@@ -7,6 +7,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	mrand "math/rand"
+	mrand2 "math/rand/v2"
 	"net/http"
 	"os"
 	"time"
@@ -25,11 +26,16 @@ func Register(ctx dbos.Context) {
 
 // The fact records what Run can reach, by short tag, for any package that
 // calls it. It is what package crossreg reads across a package boundary.
-func Run(ctx dbos.Context, in In) (Out, error) { // want Run:"nondeterministic: crypto/rand, go-stmt, map-range, math/rand, net/http, os.Getenv, os.ReadFile, select-stmt, time.Now, time.Since, uuid"
+func Run(ctx dbos.Context, in In) (Out, error) { // want Run:"nondeterministic: crypto/rand, go-stmt, map-range, math/rand, net/http, os.File, os.Getenv, os.ReadFile, select-stmt, time.Now, time.Since, time.Sleep, uuid"
 	started := time.Now()   // want "`time.Now` in workflow code"
 	_ = time.Since(started) // want "`time.Since` in workflow code"
 
-	_ = mrand.Intn(10) // want "`math/rand` in workflow code"
+	// A durable delay is dbos.Sleep; time.Sleep is both non-deterministic and
+	// lost on replay, and is the substitution people forget most often.
+	time.Sleep(time.Millisecond) // want "`time.Sleep` in workflow code"
+
+	_ = mrand.Intn(10)  // want "`math/rand` in workflow code"
+	_ = mrand2.IntN(10) // want "`math/rand` in workflow code"
 
 	buf := make([]byte, 4)
 	_, _ = crand.Read(buf) // want "`crypto/rand` in workflow code"
@@ -41,6 +47,10 @@ func Run(ctx dbos.Context, in In) (Out, error) { // want Run:"nondeterministic: 
 
 	_ = os.Getenv("AGENTIQ_DATABASE_URL")   // want "`os.Getenv` in workflow code"
 	_, _ = os.ReadFile("/etc/agentiq.yaml") // want "`os.ReadFile` in workflow code"
+
+	// A method on *os.File, reached through a package-level variable rather
+	// than through a call in package os.
+	_, _ = os.Stdout.WriteString("resolving\n") // want "file I/O in workflow code"
 
 	_, _ = http.Get("https://example.invalid/agent") // want "`net/http` in workflow code"
 

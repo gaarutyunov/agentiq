@@ -12,6 +12,7 @@ import (
 	"context"
 	crand "crypto/rand"
 	mrand "math/rand"
+	mrand2 "math/rand/v2"
 	"net/http"
 	"os"
 	"time"
@@ -34,7 +35,10 @@ func Run(ctx dbos.Context, in In) (Out, error) {
 	_, err := dbos.RunAsStep(ctx, func(context.Context) (string, error) {
 		started := time.Now()
 		_ = time.Since(started)
+		time.Sleep(time.Millisecond)
 		_ = mrand.Intn(10)
+		_ = mrand2.IntN(10)
+		_, _ = os.Stdout.WriteString("resolving\n")
 
 		buf := make([]byte, 4)
 		_, _ = crand.Read(buf)
