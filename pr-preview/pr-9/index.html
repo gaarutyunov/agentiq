@@ -49,6 +49,7 @@
         <div class="actions">
           <ga-button id="start" variant="primary" disabled>Start a workflow</ga-button>
           <ga-button id="reload" variant="ghost">Reload the tab</ga-button>
+          <ga-button id="bad-sql" variant="ghost">Run invalid SQL</ga-button>
         </div>
       </section>
 
@@ -78,6 +79,16 @@
           <dt>execProtocol result shape</dt>
           <dd id="shape">—</dd>
         </dl>
+      </ga-card>
+
+      <ga-card>
+        <h2>Errors through the shim</h2>
+        <p class="hint">
+          Failure-matrix row F20: invalid SQL must come back as a real pgx error
+          with its SQLSTATE intact, not as a lost frame or a torn connection.
+          Press <em>Run invalid SQL</em> above.
+        </p>
+        <ga-alert id="shim-error" tone="info" title="Invalid SQL" hidden></ga-alert>
       </ga-card>
 
       <ga-card>
