@@ -140,6 +140,21 @@ jobs:
             } >> "$GITHUB_STEP_SUMMARY"
           fi
 
+      # Ubuntu 23.10+ ships an AppArmor profile that denies unprivileged user
+      # namespaces, which is the sandbox Chrome's zygote needs. Without this
+      # the browser aborts before the first navigation:
+      #
+      #   FATAL:content/browser/zygote_host/zygote_host_impl_linux.cc:128]
+      #   No usable sandbox!
+      #
+      # Chrome names `--no-sandbox` as the "live dangerously" workaround; this
+      # lifts the restriction instead, so the suite drives a browser that is
+      # still sandboxed — closer to the one a user runs, and it keeps the
+      # workaround out of test/browser, which also runs on developer machines
+      # that have no such restriction.
+      - name: Allow unprivileged user namespaces (Chrome sandbox)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+
       # `-v` (in the make target) is what makes a whole-suite skip legible:
       # without it a skip prints as `ok`, indistinguishable from three passing
       # scenarios.
