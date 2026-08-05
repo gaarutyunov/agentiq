@@ -1,0 +1,131 @@
+# AgentIQ architecture enforcement (SPEC.md §17).
+#
+# Run this through ./bin/custom-gcl, not the stock binary: `determinism` and
+# `rawsql` are module plugins built by `golangci-lint custom` from
+# .custom-gcl.yml. The stock golangci-lint-action does not load module plugins,
+# so using it would silently skip the determinism analyzer — the one check with
+# no off-the-shelf substitute (§17.1).
+#
+#   golangci-lint custom          # builds ./bin/custom-gcl
+#   ./bin/custom-gcl run ./...
+#
+# SPEC.md §17.2 writes these settings in golangci-lint v1 syntax
+# (`linters-settings:` at the top level). v2.6.0, which .custom-gcl.yml pins,
+# requires the v2 schema: `version: "2"` and settings nested under `linters`.
+# The rules below are the §17.2 rules, unchanged in substance.
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    - depguard
+    - forbidigo
+    - determinism
+    - rawsql
+
+  settings:
+    custom:
+      # The determinism analyzer (§17.1). Entry points are the functions passed
+      # to dbos.RegisterWorkflow plus their transitive call graph within this
+      # module; the walk terminates at dbos.RunAsStep, dbos.RunAsTransaction,
+      # dbos.Go and dbos.Select.
+      determinism:
+        type: module
+        description: DBOS workflow code must be deterministic (SPEC.md §9.1, §17.1)
+        settings:
+          # Bounds the call-graph walk. Inferred when empty; stated here so a
+          # rename of the module does not silently narrow the analyzer to one
+          # package.
+          module: github.com/gaarutyunov/agentiq
+
+      # Raw SQL string literals (§17.2, §21 "no hand-written SQL"). §17.2
+      # assigns this to forbidigo, which cannot carry it: forbidigo's visitor
+      # handles only *ast.Ident and *ast.SelectorExpr and never sees a string
+      # literal, so a forbidigo pattern written for SQL text would match
+      # nothing while reading as enforcement. It is a module plugin instead;
+      # the forbidigo block below keeps the part forbidigo *can* do.
+      rawsql:
+        type: module
+        description: persistence goes through the generated client (SPEC.md §21)
+
+    depguard:
+      rules:
+        no-sql-outside-generated:
+          files: ["$all", "!**/generated/**", "!**/wasmpg/**"]
+          deny:
+            - pkg: "github.com/jackc/pgx/v5"
+              desc: "pgx is confined to generated/ and wasmpg/"
+            - pkg: "database/sql"
+              desc: "persistence goes through the generated client"
+
+        # artifact/ does not exist yet — it is M3 (SPEC.md §20). The rule is
+        # written now because a rule added only once its target exists is a
+        # rule nobody remembers to add, and because `!**/artifact/**` on a
+        # directory that has no files denies these imports everywhere, which is
+        # the correct behaviour until M3 lands.
+        no-oci-outside-artifact:
+          files: ["$all", "!**/artifact/**"]
+          deny:
+            - pkg: "oras.land/oras-go/v2"
+              desc: "OCI access goes through the epos API, in artifact/ only"
+            - pkg: "github.com/gaarutyunov/epos"
+              desc: "the epos API is confined to artifact/"
+
+        # demo/wasm/ does not exist yet either; same reasoning.
+        no-js-outside-wasmpg:
+          files: ["$all", "!**/wasmpg/**", "!**/demo/wasm/**"]
+          deny:
+            - pkg: "syscall/js"
+              desc: "JS interop is confined to wasmpg/"
+
+    forbidigo:
+      # Types are needed so a pattern can be scoped to the package a method
+      # belongs to, which is what keeps this rule from firing on any method
+      # that happens to be called Query.
+      analyze-types: true
+      # golangci-lint names this key `forbid`; forbidigo's own documentation
+      # calls the same thing `patterns`, and the wrong name is accepted in
+      # silence — the linter then runs with no patterns and reports nothing.
+      forbid:
+        # The identifier half of "no hand-written SQL": the calls that take a
+        # SQL string and run it. depguard already keeps pgx and database/sql
+        # out of every package but generated/ and wasmpg/; this catches the
+        # case where such a call is reached through a type that crossed the
+        # boundary as a value rather than as an import.
+        - pattern: '^.*\.(Exec|ExecContext|Query|QueryContext|QueryRow|QueryRowContext|CopyFrom|SendBatch)$'
+          pkg: '^(github\.com/jackc/pgx/v5(/.*)?|database/sql)$'
+          msg: >-
+            SQL is executed by the generated client; queries come from the SDL in
+            schema/ via `go generate ./...` (SPEC.md §11, §21).
+
+  exclusions:
+    generated: lax
+    rules:
+      # generated/ is produced by gopgql and never hand-edited (SPEC.md §11).
+      # Its SQL is the point of it, and its pgx use is what the depguard rule
+      # above already exempts.
+      - path: '(^|/)generated/'
+        linters:
+          - rawsql
+          - forbidigo
+
+      # wasmpg/ speaks the PostgreSQL wire protocol directly (SPEC.md §12); it
+      # is exempt from the SQL rules for the same reason depguard exempts it.
+      - path: '(^|/)wasmpg/'
+        linters:
+          - rawsql
+          - forbidigo
+
+      # test/drift introspects dbos.* to compare the column set against a
+      # checked-in fixture (SPEC.md §17.4). That query cannot come from the
+      # generated client: the whole point is to see what the database actually
+      # has, independently of what was generated from the SDL.
+      - path: '(^|/)test/drift/'
+        linters:
+          - rawsql
+
+issues:
+  # An architecture rule is not a style nit: every violation is reported, not
+  # the first three per linter.
+  max-issues-per-linter: 0
+  max-same-issues: 0

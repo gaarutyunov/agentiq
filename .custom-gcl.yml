@@ -1,0 +1,17 @@
+# Builds ./bin/custom-gcl, a golangci-lint carrying the AgentIQ architecture
+# analyzers (SPEC.md §17.1). Run `golangci-lint custom`, then `./bin/custom-gcl
+# run ./...` — the stock golangci-lint-action does not load module plugins, so
+# CI builds this binary explicitly (§18.1) and invoking the action instead
+# silently skips the determinism analyzer.
+#
+# `path: ./analyzer` makes that directory the root of module
+# github.com/gaarutyunov/agentiq for the plugin build: golangci-lint turns it
+# into a filesystem replace and imports the package at the module root. That is
+# why analyzer/ has its own go.mod declaring the same module path as the
+# repository — see analyzer/plugin.go.
+version: v2.6.0
+name: custom-gcl
+destination: ./bin
+plugins:
+  - module: github.com/gaarutyunov/agentiq
+    path: ./analyzer
