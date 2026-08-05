@@ -105,6 +105,20 @@ func (m *Multiplexer) subscribe(pglite js.Value) {
 	})
 }
 
+// addCleanup registers a function to run at [Multiplexer.Close].
+//
+// It lives here rather than beside Close in mux.go because JavaScript interop
+// is the only thing that needs it: a js.Func pins the Go closure behind it
+// until Release is called, so subscribe has something to undo and a build
+// without JavaScript has nothing. Declaring it in mux.go made it a method the
+// host-architecture build could see and no host-architecture build could call
+// — which reads as dead code and is not.
+func (m *Multiplexer) addCleanup(fn func()) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cleanup = append(m.cleanup, fn)
+}
+
 // await blocks the calling goroutine on a JavaScript promise, without blocking
 // the JavaScript event loop (SPEC.md §12.5). The promise's settlement runs on
 // the event loop and hands the result over a channel; the Go scheduler resumes

@@ -87,10 +87,13 @@ func TestHandshakeByteSequence(t *testing.T) {
 func TestNextFrontendMessageStartupFraming(t *testing.T) {
 	ssl := startupMessage(sslRequestCode, nil)
 
-	// A short buffer is not an error: it is "wait for more bytes".
+	// A short buffer is not an error: it is "wait for more bytes". Nothing is
+	// consumed and nothing is decoded — a partially filled message here would
+	// be handed to the handshake as if it were complete.
 	msg, n, err := nextFrontendMessage(ssl[:4], true)
 	require.NoError(t, err)
 	assert.Zero(t, n)
+	assert.Equal(t, frontendMessage{}, msg)
 
 	msg, n, err = nextFrontendMessage(ssl, true)
 	require.NoError(t, err)

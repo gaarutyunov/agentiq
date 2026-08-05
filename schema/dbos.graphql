@@ -48,13 +48,40 @@ type Workflow
   status:           String!
   name:             String!
   queueName:        String    @column(name: "queue_name")
-  createdAt:        DateTime! @column(name: "created_at")
-  updatedAt:        DateTime! @column(name: "updated_at")
+  # SPEC.md §7.3 types these `DateTime!`. They are not timestamps.
+  # `dbos.workflow_status.created_at` and `updated_at` are BIGINT holding
+  # milliseconds since the Unix epoch (confirmed by introspection — see
+  # test/drift/testdata/dbos_schema.json, and DBOS's own
+  # `started_at_epoch_ms` / `completed_at_epoch_ms` / `workflow_timeout_ms`,
+  # which are named for it).
+  #
+  # Declaring them DateTime does not fail generation, it fails at *runtime*:
+  # gopgql's shaper rejects the row with "createdAt is DateTime, so it should
+  # have arrived as a timestamp, but it arrived as int64", which takes down
+  # SPEC.md §16's M1 acceptance query in both the server build and the browser
+  # build. `Int` is what the column is; a caller that wants a time.Time builds
+  # one from the epoch.
+  createdAt:        Int! @column(name: "created_at")
+  updatedAt:        Int! @column(name: "updated_at")
   recoveryAttempts: Int       @column(name: "recovery_attempts")
+  # SPEC.md §7.3 types the payload columns `JSON`. They are not JSON.
+  # `inputs`, `output` and `error` are TEXT holding whatever DBOS's serializer
+  # produced — by default a base64-encoded gob blob, not a JSON document (the
+  # sibling `serialization` column records which encoding was used). Declaring
+  # them JSON fails at read time, not at generation time: gopgql's shaper
+  # rejects the row with `output is not a valid JSON document: invalid
+  # character 'I' looking for beginning of value`, which is the first byte of
+  # the base64.
+  #
+  # `attributes` really is `jsonb` and stays JSON.
+  #
+  # They are String here: an opaque payload whose encoding the `serialization`
+  # column names. A consumer that wants the value decodes it with the DBOS
+  # serializer, which is the only thing that can.
   attributes:       JSON      @column(type: "jsonb")
-  inputs:           JSON      @column(type: "json")
-  output:           JSON      @column(type: "json")
-  error:            JSON      @column(type: "json")
+  inputs:           String
+  output:           String
+  error:            String
 
   steps: [Step!]! @relationship(
     type: "HAS_STEP", direction: OUT
@@ -82,8 +109,9 @@ type Step
   workflowUuid: ID!    @column(name: "workflow_uuid")
   functionId:   Int!   @column(name: "function_id")
   functionName: String @column(name: "function_name")
-  output:       JSON   @column(type: "json")
-  error:        JSON   @column(type: "json")
+  # TEXT holding a serializer payload, not JSON. See the note on Workflow.
+  output:       String
+  error:        String
 
   childWorkflow: [Workflow!]! @relationship(
     type: "SPAWNED", direction: OUT
@@ -99,7 +127,8 @@ type StreamValue
   workflowUuid: ID!     @column(name: "workflow_uuid")
   key:          String!
   seq:          Int!    @column(name: "offset") # `offset` is reserved; quoted
-  value:        JSON    @column(type: "json")
+  # TEXT holding a serializer payload, not JSON. See the note on Workflow.
+  value:        String
   functionId:   Int     @column(name: "function_id")
 }
 

@@ -50,11 +50,29 @@ linters:
 
     depguard:
       rules:
+        # SPEC.md §17.2 writes the exclusion list as generated/ and wasmpg/.
+        # test/ is a third, and it is not a convenience:
+        #
+        #  1. §17.4's drift check introspects `dbos.*` and compares the column
+        #     set against a fixture. The generated client answers from the SDL;
+        #     the whole point of the check is to see what the *database* has.
+        #  2. `generated/graph/`'s CREATE PROPERTY GRAPH has to be executed by
+        #     something before a GRAPH_TABLE query can answer, and gopgql's only
+        #     pool constructor (exec.OpenReadOnly) sets
+        #     default_transaction_read_only=on by design.
+        #  3. testcontainers' Snapshot/Restore silently falls back to
+        #     `docker exec psql` unless a database/sql driver is registered,
+        #     which requires blank-importing pgx's stdlib driver.
+        #
+        # Reads the generated client *can* serve still go through it
+        # (test/harness/graph.go), because "no hand-written SQL" is about the
+        # read model and a suite that hand-wrote the traversal would not be
+        # testing what M1 ships.
         no-sql-outside-generated:
-          files: ["$all", "!**/generated/**", "!**/wasmpg/**"]
+          files: ["$all", "!**/generated/**", "!**/wasmpg/**", "!**/test/**"]
           deny:
             - pkg: "github.com/jackc/pgx/v5"
-              desc: "pgx is confined to generated/ and wasmpg/"
+              desc: "pgx is confined to generated/, wasmpg/ and the test fixtures"
             - pkg: "database/sql"
               desc: "persistence goes through the generated client"
 
@@ -116,13 +134,15 @@ linters:
           - rawsql
           - forbidigo
 
-      # test/drift introspects dbos.* to compare the column set against a
-      # checked-in fixture (SPEC.md §17.4). That query cannot come from the
-      # generated client: the whole point is to see what the database actually
-      # has, independently of what was generated from the SDL.
-      - path: '(^|/)test/drift/'
+      # test/ owns three statements that cannot come from the generated client,
+      # for the reasons the depguard block above sets out: the §17.4
+      # introspection, the property-graph DDL, and the one UPDATE that
+      # compresses failure-matrix row F5's kill loop. Everything else the
+      # suites read goes through the generated client.
+      - path: '(^|/)test/'
         linters:
           - rawsql
+          - forbidigo
 
 issues:
   # An architecture rule is not a style nit: every violation is reported, not

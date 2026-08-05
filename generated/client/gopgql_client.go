@@ -163,7 +163,7 @@ type WorkflowWithStepsWorkflow struct {
 	Status       string
 	Name         string
 	QueueName    *string
-	CreatedAt    time.Time
+	CreatedAt    int64
 	Steps        []WorkflowWithStepsWorkflowSteps
 }
 
@@ -171,13 +171,13 @@ type WorkflowWithStepsWorkflow struct {
 type WorkflowWithStepsWorkflowSteps struct {
 	FunctionId   int64
 	FunctionName *string
-	Output       *any
-	Error        *any
+	Output       *string
+	Error        *string
 }
 
-const workflowWithStepsSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v1_k0, v1_k1, v1_c0, v1_c1, v1_c2::text AS v1_c2, v1_c3::text AS v1_c3\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS workflow) -[e0 IS \"HAS_STEP\"]-> (v1 IS step)\n  WHERE v0.workflow_uuid = $1\n  COLUMNS (v0.workflow_uuid AS v0_k, v0.workflow_uuid AS v0_c0, v0.status AS v0_c1, v0.name AS v0_c2, v0.queue_name AS v0_c3, v0.created_at AS v0_c4, v1.workflow_uuid AS v1_k0, v1.function_id AS v1_k1, v1.function_id AS v1_c0, v1.function_name AS v1_c1, v1.output AS v1_c2, v1.error AS v1_c3)\n)\nORDER BY v0_k, v1_k0, v1_k1"
+const workflowWithStepsSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v1_k0, v1_k1, v1_c0, v1_c1, v1_c2, v1_c3\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS workflow) -[e0 IS \"HAS_STEP\"]-> (v1 IS step)\n  WHERE v0.workflow_uuid = $1\n  COLUMNS (v0.workflow_uuid AS v0_k, v0.workflow_uuid AS v0_c0, v0.status AS v0_c1, v0.name AS v0_c2, v0.queue_name AS v0_c3, v0.created_at AS v0_c4, v1.workflow_uuid AS v1_k0, v1.function_id AS v1_k1, v1.function_id AS v1_c0, v1.function_name AS v1_c1, v1.output AS v1_c2, v1.error AS v1_c3)\n)\nORDER BY v0_k, v1_k0, v1_k1"
 
-var workflowWithStepsProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "workflow_status", TypeName: "Workflow", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "status", Property: "status", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "name", Property: "name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "queueName", Property: "queue_name", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at", Column: "v0_c4", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "steps", TypeName: "Step", Alias: "v1", KeyColumns: []string{"v1_k0", "v1_k1"}, Fields: []compiler.ProjectedField{{ResponseKey: "functionId", Property: "function_id", Column: "v1_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "functionName", Property: "function_name", Column: "v1_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "output", Property: "output", Column: "v1_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "error", Property: "error", Column: "v1_c3", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}}}}
+var workflowWithStepsProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "workflow_status", TypeName: "Workflow", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "status", Property: "status", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "name", Property: "name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "queueName", Property: "queue_name", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at", Column: "v0_c4", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "steps", TypeName: "Step", Alias: "v1", KeyColumns: []string{"v1_k0", "v1_k1"}, Fields: []compiler.ProjectedField{{ResponseKey: "functionId", Property: "function_id", Column: "v1_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "functionName", Property: "function_name", Column: "v1_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "output", Property: "output", Column: "v1_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "error", Property: "error", Column: "v1_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}}}}}
 
 // WorkflowWithSteps runs the WorkflowWithSteps operation through the handle the caller supplies.
 func (c *Client) WorkflowWithSteps(ctx context.Context, h exec.Handle, in WorkflowWithStepsInput) ([]WorkflowWithStepsWorkflow, error) {
@@ -221,7 +221,7 @@ func assembleWorkflowWithStepsWorkflow(path string, v any) ([]WorkflowWithStepsW
 		if o.QueueName, err = gopgqlPointer(at+".queueName", row["queueName"], gopgqlAsString); err != nil {
 			return nil, err
 		}
-		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsTime); err != nil {
+		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsInt64); err != nil {
 			return nil, err
 		}
 		if o.Steps, err = assembleWorkflowWithStepsWorkflowSteps(at+".steps", row["steps"]); err != nil {
@@ -255,10 +255,10 @@ func assembleWorkflowWithStepsWorkflowSteps(path string, v any) ([]WorkflowWithS
 		if o.FunctionName, err = gopgqlPointer(at+".functionName", row["functionName"], gopgqlAsString); err != nil {
 			return nil, err
 		}
-		if o.Output, err = gopgqlPointer(at+".output", row["output"], gopgqlAsAny); err != nil {
+		if o.Output, err = gopgqlPointer(at+".output", row["output"], gopgqlAsString); err != nil {
 			return nil, err
 		}
-		if o.Error, err = gopgqlPointer(at+".error", row["error"], gopgqlAsAny); err != nil {
+		if o.Error, err = gopgqlPointer(at+".error", row["error"], gopgqlAsString); err != nil {
 			return nil, err
 		}
 		out = append(out, o)

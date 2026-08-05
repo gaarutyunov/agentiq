@@ -135,8 +135,14 @@ type Multiplexer struct {
 	conns   map[*Conn]struct{}
 	routes  map[string]map[*Conn]struct{}
 	nextPID int32
-	cleanup []func()
 	closed  bool
+
+	// cleanup runs at Close. It exists for the js.Func values pglite_js.go
+	// hands to JavaScript, which leak the Go closure behind them until they
+	// are Released; addCleanup, its only producer, lives in that file because
+	// there is nothing to release on a build that has no JavaScript. On every
+	// other build this stays nil and Close drains nothing.
+	cleanup []func()
 }
 
 // New builds a multiplexer over an existing backend function. The browser
@@ -277,14 +283,6 @@ func (m *Multiplexer) Close() error {
 		fn()
 	}
 	return nil
-}
-
-// addCleanup registers a function to run at Close. pglite_js.go uses it to
-// release the js.Func values it handed to JavaScript.
-func (m *Multiplexer) addCleanup(fn func()) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.cleanup = append(m.cleanup, fn)
 }
 
 // submit runs one execProtocol round trip on behalf of c, holding the
