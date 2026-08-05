@@ -19,6 +19,14 @@
 # §18.1 runs the §18.3 size gate as its own step, so it has to be runnable
 # without re-deriving the threshold in YAML. See the target.
 
+# `make -j` would break two things here, both observed rather than theorised:
+# golangci-lint takes a global lock and refuses to start with "parallel
+# golangci-lint is running", which the three `lint` passes would trip over each
+# other on; and `generate-check`'s `git diff --exit-code` has to run before
+# `demo` writes into demo/dist, which prerequisite order guarantees only in a
+# serial make.
+.NOTPARALLEL:
+
 .PHONY: verify generate-check lint lint-host lint-analyzer lint-wasm \
         test-unit test-integration test-drift demo browser-test wasm-size \
         custom-gcl
