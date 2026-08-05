@@ -54,6 +54,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
@@ -61,6 +62,7 @@ import (
 	"time"
 
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gaarutyunov/agentiq/demo"
@@ -255,6 +257,7 @@ func (a *app) boot(ctx context.Context) error {
 	go a.watchdog(ctx, mux)
 
 	u.onClick("start", func() { a.startRun(ctx) })
+	u.onClick("bad-sql", func() { a.runInvalidSQL(ctx) })
 	u.onClick("reload", func() { js.Global().Get("location").Call("reload") })
 
 	u.ready()
@@ -413,6 +416,44 @@ func (a *app) refresh(ctx context.Context) {
 			a.ui.setPGlite(a.backend.observe())
 		}
 	}
+}
+
+// invalidStatement is deliberately invalid SQL, and it is the whole of
+// failure-matrix row F20: "invalid SQL in the browser test surfaces as a pgx
+// error through the shim". The row is about the *transport* — that an
+// ErrorResponse frame produced by PGlite is framed, read back through
+// wasmpg.Conn and decoded by pgx into a *pgconn.PgError with its SQLSTATE
+// intact, rather than being lost or presenting as a torn connection.
+//
+// It cannot come from the generated client: gopgql compiles statements from the
+// SDL and will not emit one that references a table that does not exist. That
+// is why .golangci.yml exempts this package from rawsql, and why the exemption
+// names this statement.
+const invalidStatement = "SELECT * FROM a_relation_that_does_not_exist"
+
+// runInvalidSQL drives F20 from the page. The error it produces is reported,
+// not raised: a demonstration that errors survive the shim is only a
+// demonstration if the page stays up afterwards.
+func (a *app) runInvalidSQL(ctx context.Context) {
+	_, err := a.pool.Exec(ctx, invalidStatement)
+	if err == nil {
+		// A statement that cannot succeed just did. That is a finding.
+		a.ui.setShimError(shimError{Statement: invalidStatement, Message: "the invalid statement unexpectedly succeeded"})
+		return
+	}
+
+	out := shimError{Statement: invalidStatement, Message: err.Error()}
+
+	// The SQLSTATE is the point. An error that arrives as a plain string has
+	// lost the frame; one that arrives as a *pgconn.PgError carrying 42P01 was
+	// decoded from a real ErrorResponse.
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		out.SQLState = pgErr.Code
+		out.Message = pgErr.Message
+		out.IsPgError = true
+	}
+	a.ui.setShimError(out)
 }
 
 // watchdog reports the transport's own counters on a timer.

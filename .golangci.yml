@@ -68,11 +68,25 @@ linters:
         # (test/harness/graph.go), because "no hand-written SQL" is about the
         # read model and a suite that hand-wrote the traversal would not be
         # testing what M1 ships.
+        # demo/wasm/ is a fourth, and it is a defect in §17.2 rather than a
+        # relaxation of it. §8.6 and §12.4 require the browser entry point to
+        # build a `pgxpool` over `wasmpg.Dialer` and to set `MaxConns` from the
+        # multiplexer's budget — which cannot be done without importing pgxpool.
+        # `wasmpg` deliberately does not import it (it models the backend as a
+        # function so the multiplexer can be tested off-target), so the import
+        # has nowhere else to live. §17.2's sibling rule `no-js-outside-wasmpg`
+        # already lists `demo/wasm/`; this one looks like it simply missed it.
+        #
+        # Worth knowing when reading a green run: none of this is evaluated by
+        # a host-architecture lint pass at all. Every file in demo/wasm/ is
+        # `//go:build js && wasm`, and golangci-lint skips build-constrained
+        # files, so these four imports are only visible under
+        # `GOOS=js GOARCH=wasm` — which is what `make lint-wasm` is for.
         no-sql-outside-generated:
-          files: ["$all", "!**/generated/**", "!**/wasmpg/**", "!**/test/**"]
+          files: ["$all", "!**/generated/**", "!**/wasmpg/**", "!**/test/**", "!**/demo/wasm/**"]
           deny:
             - pkg: "github.com/jackc/pgx/v5"
-              desc: "pgx is confined to generated/, wasmpg/ and the test fixtures"
+              desc: "pgx is confined to generated/, wasmpg/, demo/wasm/ and the test fixtures"
             - pkg: "database/sql"
               desc: "persistence goes through the generated client"
 
@@ -140,6 +154,20 @@ linters:
       # compresses failure-matrix row F5's kill loop. Everything else the
       # suites read goes through the generated client.
       - path: '(^|/)test/'
+        linters:
+          - rawsql
+          - forbidigo
+
+      # demo/wasm/ runs the generated property-graph DDL and, for
+      # failure-matrix row F20, one deliberately invalid statement — the row is
+      # "invalid SQL in the browser surfaces as a pgx error through the shim",
+      # so the statement being invalid is the assertion. It also runs the
+      # LISTEN/NOTIFY pair that measures whether notifications cross the shim
+      # at all (SPEC.md §12.4), which no generated client can express because
+      # it is a question about the transport rather than about the data.
+      #
+      # Everything the page actually reads goes through the generated client.
+      - path: '(^|/)demo/wasm/'
         linters:
           - rawsql
           - forbidigo

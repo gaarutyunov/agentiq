@@ -47,7 +47,24 @@ type pageState struct {
 	Probe     notifyProbe   `json:"notificationProbe"`
 	PGlite    observations  `json:"pglite"`
 	Workflows []workflowRow `json:"workflows"`
-	Log       []string      `json:"log"`
+	// ShimError is the last error deliberately provoked through the transport
+	// (failure-matrix row F20). It is nil until the page is asked to run
+	// invalid SQL, and it is not the same thing as Error: Error means the
+	// runtime did not start, this means the runtime reported a database error
+	// correctly.
+	ShimError *shimError `json:"shimError,omitempty"`
+	Log       []string   `json:"log"`
+}
+
+// shimError is what an error looked like by the time it had crossed the shim.
+type shimError struct {
+	Statement string `json:"statement"`
+	Message   string `json:"message"`
+	// SQLState is populated only when the error decoded to a *pgconn.PgError,
+	// which is what F20 actually asserts: the ErrorResponse frame survived the
+	// transport with its SQLSTATE intact.
+	SQLState  string `json:"sqlState,omitempty"`
+	IsPgError bool   `json:"isPgError"`
 }
 
 // runtimeFacts is what the page reports about how it wired itself up. Every
@@ -214,6 +231,24 @@ func (u *ui) setProbe(p notifyProbe) {
 	}
 	u.logf("notification probe: %s", p.Verdict)
 	u.flush()
+}
+
+// setShimError publishes the F20 result to the page and to the state element.
+func (u *ui) setShimError(e shimError) {
+	u.mu.Lock()
+	u.state.ShimError = &e
+	u.mu.Unlock()
+
+	if box := u.el("shim-error"); !box.IsNull() {
+		text := e.Message
+		if e.SQLState != "" {
+			text = fmt.Sprintf("SQLSTATE %s: %s", e.SQLState, e.Message)
+		}
+		box.Set("textContent", text)
+		box.Call("setAttribute", "tone", map[bool]string{true: "success", false: "warning"}[e.IsPgError])
+		box.Call("removeAttribute", "hidden")
+	}
+	u.logf("invalid SQL through the shim: pgError=%t sqlstate=%q %s", e.IsPgError, e.SQLState, e.Message)
 }
 
 func (u *ui) setPGlite(o observations) {

@@ -21,6 +21,16 @@ import { PGlite } from "./vendor/pglite/index.js";
 const PGLITE_VERSION = "0.5.4-pg19.1";
 
 globalThis.agentiq = {
+  // contract is the version of the page's machine-readable surface: the
+  // `window.agentiq` functions below and the element IDs the Go side drives
+  // (#stage, #start, #reload, #bad-sql, #runs, #probe, #shape, #shim-error,
+  // #facts, #log, #error, and #agentiq-state which carries all of it as JSON).
+  //
+  // It exists so a browser test can fail loudly on a page that predates the
+  // contract instead of silently asserting on elements that are not there.
+  // Bump it when an ID is removed or renamed; adding one is not a break.
+  contract: 1,
+
   pgliteVersion: PGLITE_VERSION,
 
   // createPGlite is what demo/wasm/main.go calls. It returns a promise, which
