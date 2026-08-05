@@ -269,12 +269,18 @@ func terminal(status string) bool {
 // chromedp.Navigate against a page that a raw navigation reaches in a second.
 //
 // So the navigation is issued raw and everything that means "the runtime is up"
-// is [suite.settle]'s, asked of the page rather than polled at it. The commit
-// itself is quick, so it gets [evalTimeout] rather than the boot budget: a
-// navigation that has not committed in that long has not been slowed by the
-// page, because the page has not run yet.
+// is [suite.settle]'s, asked of the page rather than polled at it.
+//
+// The commit gets the boot budget rather than a round-trip one. It is tempting
+// to give it less on the grounds that the page has not run yet and so cannot be
+// what is slow — and that is wrong. Committing a navigation means opening the
+// connection and reading the first bytes of a 25 MB asset set, on a browser
+// that is competing for CPU with everything else on the machine; it has been
+// measured at 21 and 48 seconds on a quiet box and it exceeded two minutes on a
+// loaded one. A bound that assumes otherwise turns a busy machine into a red
+// suite, which is the failure mode a browser test must not have.
 func (s *suite) load(what string, action chromedp.Action) error {
-	ctx, cancel := context.WithTimeout(s.tab, evalTimeout)
+	ctx, cancel := context.WithTimeout(s.tab, bootTimeout)
 	defer cancel()
 	if err := chromedp.Run(ctx, action); err != nil {
 		return fmt.Errorf("%s %s: %w", what, s.target, err)

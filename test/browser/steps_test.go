@@ -65,6 +65,24 @@ const (
 // upper-case letters.
 const sqlstatePattern = `^[0-9A-Z]{5}$`
 
+// agentRunSteps is the checkpoint chain workflow.AgentRun leaves behind, and
+// therefore what the property graph has to return for a run of it.
+//
+// `DBOS.sleep` belongs in this list and is easy to leave out of it. AgentRun
+// names two steps itself, with dbos.WithStepName, and reading only those two
+// out of the source is how this assertion was first written — against a live
+// page that returns three. The sleep between them is `dbos.Sleep`, which is
+// durable and checkpointed precisely so that a recovered workflow does not
+// serve it again (workflow.go), and a checkpoint is a step whether or not the
+// workflow author named it.
+//
+// It is asserted as an exact set rather than as a subset. test/durable asks
+// only whether particular steps are present, because what it is testing is
+// recovery; here the claim is the feature file's — that the graph returns "the
+// workflow with its steps" — and a subset check would pass just as happily on a
+// traversal that lost one.
+var agentRunSteps = []string{"resolveAgent", "DBOS.sleep", "completeRun"}
+
 // suite is the browser scenario state.
 type suite struct {
 	target  string
@@ -323,9 +341,9 @@ func (s *suite) theGraphReturnsSteps() error {
 	assert.Empty(a, row.StepsError,
 		"the property-graph traversal for workflow %s failed, so the graph could not be asked what "+
 			"steps it has\n%s", s.workflowID, describe(st))
-	assert.ElementsMatch(a, []string{"resolveAgent", "completeRun"}, row.stepNames(),
-		"the property graph returned %d step(s) for workflow %s; workflow.AgentRun has resolveAgent "+
-			"and completeRun\n%s", len(row.Steps), s.workflowID, describe(st))
+	assert.ElementsMatch(a, agentRunSteps, row.stepNames(),
+		"the property graph returned %d step(s) for workflow %s; workflow.AgentRun checkpoints %v\n%s",
+		len(row.Steps), s.workflowID, agentRunSteps, describe(st))
 	return a.err()
 }
 
