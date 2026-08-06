@@ -81,11 +81,17 @@ test-drift:
 
 # `mkdir -p` is not in §16's recipe and is required: `go build -o dir/file`
 # does not create `dir`, so a clean checkout fails on the first line.
+#
+# `cp -f` is not in §16's recipe either, and without it the target works once.
+# GOROOT files are mode 0444, so the copied wasm_exec.js is read-only and the
+# *second* `make demo` in the same checkout fails with "Permission denied" —
+# a failure CI never sees, because CI always starts from a clean checkout, and
+# a developer sees on their second run.
 demo:
 	mkdir -p demo/dist
 	GOOS=js GOARCH=wasm go build -o demo/dist/agentiq.wasm ./demo/wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" demo/dist/
-	cp -r demo/web/* demo/dist/
+	cp -f "$$(go env GOROOT)/lib/wasm/wasm_exec.js" demo/dist/
+	cp -rf demo/web/* demo/dist/
 
 # `-v` is not in §16's recipe. The suite skips when AGENTIQ_PREVIEW_URL is
 # unset — there is no deployed page to drive — and without `-v` a whole-suite
