@@ -4,7 +4,9 @@ package session_test
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
+	"sort"
 	"testing"
 	"time"
 
@@ -197,20 +199,42 @@ func TestAppendEventWritesEveryTableInOneTransaction(t *testing.T) {
 	require.Len(t, rows, 1)
 	got := rows[0]
 
-	assert.Equal(t, 1, got.Sequence, "sequence is allocated by the function, starting at 1")
+	assert.Equal(t, int64(1), got.Sequence, "sequence is allocated by the function, starting at 1")
 	assert.Equal(t, "root", got.Author)
 	assert.True(t, got.TurnComplete)
 	require.NotNil(t, got.ContentRole)
 	assert.Equal(t, "model", *got.ContentRole)
 
 	require.Len(t, got.Parts, 3, "D3: parts are rows, not a blob")
-	assert.Equal(t, 0, got.Parts[0].PartIndex)
-	assert.Equal(t, 1, got.Parts[1].PartIndex)
-	assert.Equal(t, 2, got.Parts[2].PartIndex, "§7.2 rule 2: part_index is slice position")
+
+	// The generated query does not return parts in part_index order.
+	//
+	// Its ORDER BY is on each selection's *key* columns, and Part's key in the
+	// property graph is the surrogate `id` — a random uuid — so the parts of an
+	// event come back in uuid order, which is no order at all. Observed here as
+	// 0, 2, 1 before this sort was added.
+	//
+	// SPEC.md §7.2 rule 2 requires the read-back to be ordered by part_index,
+	// so whatever reads parts has to restore that order until gopgql can emit
+	// it. `session.decodeEvent` deliberately does not sort — sorting there
+	// would hide exactly this — so the sort belongs to the reader, and this is
+	// the reader.
+	sort.Slice(got.Parts, func(i, j int) bool { return got.Parts[i].PartIndex < got.Parts[j].PartIndex })
+
+	assert.Equal(t, int64(0), got.Parts[0].PartIndex)
+	assert.Equal(t, int64(1), got.Parts[1].PartIndex)
+	assert.Equal(t, int64(2), got.Parts[2].PartIndex, "§7.2 rule 2: part_index is slice position")
+	assert.Equal(t, "Let me look that up.", derefString(got.Parts[0].Text))
 	require.NotNil(t, got.Parts[1].Thought)
 	assert.True(t, *got.Parts[1].Thought)
 	require.NotNil(t, got.Parts[2].FunctionCallName)
 	assert.Equal(t, "search", *got.Parts[2].FunctionCallName)
+
+	// The base64 text column round-trips the thought signature.
+	require.NotNil(t, got.Parts[1].ThoughtSignature)
+	raw, err := base64.StdEncoding.DecodeString(*got.Parts[1].ThoughtSignature)
+	require.NoError(t, err, "the column holds base64, which is what json.Marshal wrote")
+	assert.Equal(t, []byte{0x00, 0x01, 0xfe}, raw)
 
 	require.Len(t, got.Actions, 1)
 	deltas := got.Actions[0].StateDeltas
@@ -232,6 +256,14 @@ func TestAppendEventWritesEveryTableInOneTransaction(t *testing.T) {
 	require.NoError(t, pool.QueryRow(ctx,
 		`SELECT count(*) FROM agentiq.session_state WHERE session_id = $1`, sessionID).Scan(&stateCount))
 	assert.Equal(t, 3, stateCount, "state deltas project onto session_state")
+}
+
+// derefString reads a nullable text column, treating NULL as "".
+func derefString(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
 }
 
 // TestAFailedTransactionRollsBackTheAppend is the half that proves the append
