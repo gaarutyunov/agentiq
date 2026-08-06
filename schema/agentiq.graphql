@@ -1,0 +1,357 @@
+# The AgentIQ-owned domain schema (SPEC.md §7.1) — session, event and part.
+#
+# AgentIQ owns these tables: gopgql emits their CREATE TABLE into
+# `generated/migrations/` and exposes them as vertices of the same
+# `agentiq_graph` that `schema/dbos.graphql` projects `dbos.*` into. One graph
+# spans both schemas, which is what makes `Workflow ──HAS_SESSION──▶ Session`
+# (SPEC.md §6.2, §7.3) resolvable.
+#
+# This document and `schema/dbos.graphql` are concatenated into
+# `generated/schema/agentiq.graphql` by `tools/sdlmerge` before gopgql runs.
+# gopgql's `--sdl` takes exactly one file and is not repeatable, and a property
+# graph can only span two schemas if both are described by one document.
+#
+# ---------------------------------------------------------------------------
+# How SPEC.md §7.1's idealised vocabulary maps onto the one gopgql implements
+# ---------------------------------------------------------------------------
+#
+# `schema/dbos.graphql` records the same translation for §7.3 and it is
+# unchanged here:
+#
+#   @table(name:, schema:)     ->  @node(label:, table:, schema:)
+#   @vertex(key: [cols])       ->  @key(fields: [graphql field names])
+#   @edge(from:, to:, label:)  ->  @relationship(type:, direction:, table:,
+#                                                schema:, sourceKey:, destKey:)
+#
+# `@key(fields:)` takes GraphQL field names; `sourceKey:`/`destKey:` take
+# physical column names of the *edge* table.
+#
+# gopgql does not derive a column name from a camelCase field: `appName` becomes
+# a quoted `"appName"` column, not `app_name`. Every camelCase field below
+# therefore carries an explicit `@column(name:)`, including the ones §7.1 writes
+# bare (`createdAt`, `lastUpdateAt`, `sequence`, `updatedAt`).
+#
+# ---------------------------------------------------------------------------
+# Surrogate keys: every owned type carries `id: ID!`, and it is a uuid
+# ---------------------------------------------------------------------------
+#
+# gopgql identifies a row it owns by a surrogate key and only by a surrogate
+# key. `sdl/sdl.go`'s `validateKey` rejects an owned `@node` that does not
+# declare `id: ID!` ("type Session must declare a surrogate key field
+# `id: ID!`"), rejects an `id` of any other type ("Session.id must be `ID!`
+# (surrogate uuid keys only)") and rejects `@column(type:)` on it ("Session.id
+# cannot override its type: the surrogate key is a uuid primary key"). A
+# natural `@key(fields:)` is accepted *alongside* it — as a UNIQUE constraint,
+# not as the identity — and standing alone only on a `@readonly` type.
+#
+# SPEC.md §7.1 instead identifies a session by ADK's own `Session.ID()` and an
+# event by ADK's `Event.ID`, both `string`. Those are not uuids and cannot be
+# made into uuids: `session/sessiontestsuite` appends events with
+# `ID: "event1"` and `ID: strconv.Itoa(i)` unconditionally, and creates sessions
+# with `SessionID: "test-session-id"` and `"s1"`. A uuid column cannot store
+# them and the conformance suite — M2's acceptance — fails on the first append.
+#
+# So the ADK-visible identifier is its own text column, `adk_id`, and the
+# §7.1/§6.1 identity is expressed as the natural `@key`:
+#
+#   Session   (app_name, user_id, adk_id)   §6.1 `(app_name, user_id, id)`
+#   Event     (session_id, adk_id)          §6.1 `(session_id, id)`
+#
+# It is named `adk_id` on both rather than `session_id`/`event_id` because
+# those two names are already taken by the uuid foreign keys, and gopgql
+# requires one type per property name across the whole graph (see below).
+#
+# The surrogate is invisible to SPEC.md §7.2: it is not a field of
+# `session.Event`, so it cannot perturb `json.Marshal(load(store(E)))` — the
+# same argument that lets `sequence` exist.
+#
+# Consequently the foreign keys `event.session_id`, `part.event_id`,
+# `actions.event_id`, `state_delta.event_id`, `artifact_delta.event_id` and
+# `session_state.session_id` hold the *surrogate* uuid of their parent, not the
+# ADK id. `state_delta` and `artifact_delta` additionally carry `actions_id`,
+# because §7.1's `SETS` and `PRODUCES` edges start at `Actions`, whose identity
+# is its own surrogate `id` and not `event_id`.
+#
+# ---------------------------------------------------------------------------
+# One type per property name, across the whole graph
+# ---------------------------------------------------------------------------
+#
+# gopgql's generator refuses a graph in which one property name has two types
+# ("property \"created_at\" is timestamptz on \"agentiq.session\" but bigint on
+# \"dbos.workflow_status\"; a property name has one type across the whole
+# graph"). The property name is the *column* name, so a §7.1 column collides
+# with the §7.3 projection whenever they share a name and disagree on type.
+#
+# Three do, and `dbos.*` is DBOS's to name, so the agentiq column moves:
+#
+#   §7.1                    column here        collides with
+#   Session.createdAt       created_at_ts      dbos.workflow_status.created_at  (bigint epoch ms)
+#   SessionState.updatedAt  updated_at_ts      dbos.workflow_status.updated_at  (bigint epoch ms)
+#   StateDelta.value        value_json         dbos.streams.value               (text)
+#   SessionState.value      value_json         dbos.streams.value               (text)
+#
+# The convention is a type suffix on the AgentIQ side. `Session.lastUpdateAt`
+# needs none — `dbos.*` has no `last_update_at`.
+#
+# ---------------------------------------------------------------------------
+# JSON is `json`, never `jsonb`
+# ---------------------------------------------------------------------------
+#
+# SPEC.md §7.2 rule 1 is a correctness requirement, not a preference: `jsonb`
+# normalizes key order and whitespace and breaks byte-identical round-trip.
+# gopgql maps the `JSON` scalar to **`jsonb`** by default, so every JSON column
+# on the round-trip path carries an explicit `@column(type: "json")`. Omitting
+# it is silent until an event carries a JSON value with more than one key.
+#
+# `dbos.workflow_status.attributes` is the one column in the whole spec that is
+# legitimately `jsonb`; it lives in the read-only projection, where round-trip
+# does not apply, and it keeps its `@column(type: "jsonb")` there.
+#
+# ---------------------------------------------------------------------------
+# `Bytes` does not exist
+# ---------------------------------------------------------------------------
+#
+# SPEC.md §7.1 declares `scalar Bytes # bytea`. gopgql's prelude has no such
+# scalar and declaring one does not help: the generator rejects it with
+# "Part.sig has unsupported type \"Bytes\" (no default scalar mapping)", and
+# `@column(type: "bytea")` does not rescue it — the scalar is resolved before
+# the column type is read. The two bytea columns are therefore `String` fields
+# carrying `@column(type: "bytea")`.
+
+# ---------------------------------------------------------------------------
+# Session
+# ---------------------------------------------------------------------------
+
+"""
+An ADK session. Identity is (app_name, user_id, adk_id) — SPEC.md §6.1.
+
+`workflowUuid` links the session to the DBOS workflow that produced it and is
+the source key of `Workflow ──HAS_SESSION──▶ Session` (SPEC.md §7.3). It is
+`String`, not `ID`: `dbos.workflow_status.workflow_uuid` is physically **text**
+(see test/drift/testdata/dbos_schema.json), and gopgql maps `ID` to uuid — a
+graph whose two sides disagree is rejected outright, and one that agreed on
+uuid would emit an edge joining uuid to text.
+"""
+type Session
+  @node(label: "session", table: "session", schema: "agentiq")
+  @key(fields: ["appName", "userId", "adkId"]) {
+  id:           ID!
+  adkId:        String!   @column(name: "adk_id")
+  appName:      String!   @column(name: "app_name")
+  userId:       String!   @column(name: "user_id")
+  workflowUuid: String    @column(name: "workflow_uuid")
+  agentDigest:  String!   @column(name: "agent_digest")
+  createdAt:    DateTime! @column(name: "created_at_ts")
+  lastUpdateAt: DateTime! @column(name: "last_update_at")
+
+  events: [Event!]! @relationship(
+    type: "HAS_EVENT", direction: OUT
+    table: "event", schema: "agentiq"
+    sourceKey: ["session_id"], destKey: ["id"]
+  )
+
+  state: [SessionState!]! @relationship(
+    type: "HAS_STATE", direction: OUT
+    table: "session_state", schema: "agentiq"
+    sourceKey: ["session_id"], destKey: ["id"]
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Event
+# ---------------------------------------------------------------------------
+
+"""
+Mirrors google.golang.org/adk/v2/session.Event, which embeds model.LLMResponse.
+Partial events are never stored (SPEC.md §9.4, D5).
+
+Events are normalized rows, not blobs (D3): the parts of an event are rows in
+`agentiq.part`, so the property graph and the sibling memory project can query
+them.
+
+`stepFunctionId` and `workflowUuid` are the provenance columns. Together they
+name the `(workflow_uuid, function_id)` of the DBOS step that produced the
+event — the substrate of `Event ──PRODUCED_BY──▶ Step` (SPEC.md §6.2).
+"""
+type Event
+  @node(label: "event", table: "event", schema: "agentiq")
+  @key(fields: ["sessionId", "adkId"]) {
+  id:                 ID!
+  adkId:              String!   @column(name: "adk_id")
+  sessionId:          ID!       @column(name: "session_id")
+  sequence:           Int!
+  invocationId:       String!   @column(name: "invocation_id")
+  author:             String!
+  branch:             String
+  timestamp:          DateTime!
+  turnComplete:       Boolean!  @column(name: "turn_complete")
+  interrupted:        Boolean!
+  isolationScope:     String    @column(name: "isolation_scope")
+  errorCode:          String    @column(name: "error_code")
+  errorMessage:       String    @column(name: "error_message")
+  contentRole:        String    @column(name: "content_role")
+  longRunningToolIds: [String!] @column(name: "long_running_tool_ids")
+  requestedInput:     JSON      @column(name: "requested_input", type: "json")
+  routes:             JSON      @column(type: "json")
+  nodeInfo:           JSON      @column(name: "node_info", type: "json")
+  groundingMetadata:  JSON      @column(name: "grounding_metadata", type: "json")
+  usageMetadata:      JSON      @column(name: "usage_metadata", type: "json")
+  citationMetadata:   JSON      @column(name: "citation_metadata", type: "json")
+  customMetadata:     JSON      @column(name: "custom_metadata", type: "json")
+
+  stepFunctionId:     Int       @column(name: "step_function_id")
+  workflowUuid:       String    @column(name: "workflow_uuid")
+
+  parts: [Part!]! @relationship(
+    type: "HAS_PART", direction: OUT
+    table: "part", schema: "agentiq"
+    sourceKey: ["event_id"], destKey: ["id"]
+  )
+
+  actions: [Actions!]! @relationship(
+    type: "HAS_ACTIONS", direction: OUT
+    table: "actions", schema: "agentiq"
+    sourceKey: ["event_id"], destKey: ["id"]
+  )
+}
+
+# ---------------------------------------------------------------------------
+# Part
+# ---------------------------------------------------------------------------
+
+"""
+Mirrors genai.Part. NOT a discriminated union: several fields may be set on the
+same part (e.g. text + thought + thoughtSignature). One wide table (D4); nested
+structs are flattened into prefixed columns.
+
+Do not normalize this into per-kind tables. NULLs cost ~2 bytes, one heap fetch
+per part, TOAST handles large payloads, and a 0..1 satellite table is not a
+useful graph edge.
+
+`partIndex` is written from slice position and read back with
+`ORDER BY part_index` (SPEC.md §7.2 rule 2).
+"""
+type Part
+  @node(label: "part", table: "part", schema: "agentiq")
+  @key(fields: ["eventId", "partIndex"]) {
+  id:                       ID!
+  eventId:                  ID!    @column(name: "event_id")
+  partIndex:                Int!   @column(name: "part_index")
+
+  text:                     String
+  thought:                  Boolean
+  thoughtSignature:         String @column(name: "thought_signature", type: "bytea")
+
+  functionCallId:           String @column(name: "function_call_id")
+  functionCallName:         String @column(name: "function_call_name")
+  functionCallArgs:         JSON   @column(name: "function_call_args", type: "json")
+
+  functionResponseId:       String @column(name: "function_response_id")
+  functionResponseName:     String @column(name: "function_response_name")
+  functionResponseResponse: JSON   @column(name: "function_response_response", type: "json")
+
+  inlineDataMimeType:       String @column(name: "inline_data_mime_type")
+  inlineDataBytes:          String @column(name: "inline_data_bytes", type: "bytea")
+  inlineDataDisplayName:    String @column(name: "inline_data_display_name")
+
+  fileDataMimeType:         String @column(name: "file_data_mime_type")
+  fileDataUri:              String @column(name: "file_data_uri")
+  fileDataDisplayName:      String @column(name: "file_data_display_name")
+
+  executableCodeLanguage:   String @column(name: "executable_code_language")
+  executableCodeCode:       String @column(name: "executable_code_code")
+
+  codeExecutionOutcome:     String @column(name: "code_execution_outcome")
+  codeExecutionOutput:      String @column(name: "code_execution_output")
+
+  videoMetadataStartOffset: String @column(name: "video_metadata_start_offset")
+  videoMetadataEndOffset:   String @column(name: "video_metadata_end_offset")
+  videoMetadataFps:         Float  @column(name: "video_metadata_fps")
+
+  audioTranscription:       JSON   @column(name: "audio_transcription", type: "json")
+  mediaResolution:          String @column(name: "media_resolution")
+  toolCall:                 JSON   @column(name: "tool_call", type: "json")
+  toolResponse:             JSON   @column(name: "tool_response", type: "json")
+  partMetadata:             JSON   @column(name: "part_metadata", type: "json")
+}
+
+# ---------------------------------------------------------------------------
+# Actions and its deltas
+# ---------------------------------------------------------------------------
+
+"""
+Mirrors session.EventActions. 0..1 per event (SPEC.md §6.1).
+
+`SETS` and `PRODUCES` start here, so `state_delta` and `artifact_delta` carry
+an `actions_id` referencing this row's surrogate key.
+"""
+type Actions
+  @node(label: "actions", table: "actions", schema: "agentiq")
+  @key(fields: ["eventId"]) {
+  id:                   ID!
+  eventId:              ID!     @column(name: "event_id")
+  skipSummarization:    Boolean @column(name: "skip_summarization")
+  transferToAgent:      String  @column(name: "transfer_to_agent")
+  escalate:             Boolean
+  requestedAuthConfigs: JSON    @column(name: "requested_auth_configs", type: "json")
+
+  stateDeltas: [StateDelta!]! @relationship(
+    type: "SETS", direction: OUT
+    table: "state_delta", schema: "agentiq"
+    sourceKey: ["actions_id"], destKey: ["id"]
+  )
+
+  artifactDeltas: [ArtifactDelta!]! @relationship(
+    type: "PRODUCES", direction: OUT
+    table: "artifact_delta", schema: "agentiq"
+    sourceKey: ["actions_id"], destKey: ["id"]
+  )
+}
+
+"""
+One key of an event's `EventActions.StateDelta`.
+
+`scope` is `app` | `user` | `session`, projected from the ADK key prefix
+(SPEC.md §6.4). `temp:` keys are dropped on write and are absent on read — the
+one intentional deviation from SPEC.md §7.2, asserted by its own test — so no
+row here ever carries `scope = 'temp'`.
+"""
+type StateDelta
+  @node(label: "state_delta", table: "state_delta", schema: "agentiq")
+  @key(fields: ["eventId", "key"]) {
+  id:        ID!
+  actionsId: ID!     @column(name: "actions_id")
+  eventId:   ID!     @column(name: "event_id")
+  scope:     String!
+  key:       String!
+  value:     JSON!   @column(name: "value_json", type: "json")
+}
+
+"""
+One entry of an event's `EventActions.ArtifactDelta`: a filename and the
+version the event wrote. Artifacts themselves arrive in M4.
+"""
+type ArtifactDelta
+  @node(label: "artifact_delta", table: "artifact_delta", schema: "agentiq")
+  @key(fields: ["eventId", "filename"]) {
+  id:        ID!
+  actionsId: ID!     @column(name: "actions_id")
+  eventId:   ID!     @column(name: "event_id")
+  filename:  String!
+  version:   Int!
+}
+
+"""
+The state of a session, projected from the `state_delta` rows of its events
+(SPEC.md §6.1, §6.4). `scope` is `app` | `user` | `session`.
+"""
+type SessionState
+  @node(label: "session_state", table: "session_state", schema: "agentiq")
+  @key(fields: ["sessionId", "scope", "key"]) {
+  id:        ID!
+  sessionId: ID!       @column(name: "session_id")
+  scope:     String!
+  key:       String!
+  value:     JSON!     @column(name: "value_json", type: "json")
+  updatedAt: DateTime! @column(name: "updated_at_ts")
+}

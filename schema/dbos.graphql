@@ -25,8 +25,22 @@
 # For a @readonly type the physical type is never emitted as DDL; it only tells
 # the compiler how to shape the value back.
 #
-# `Workflow.session` (SPEC.md §7.3's HAS_SESSION edge) is deliberately absent:
-# `Session` lives in `schema/agentiq.graphql`, which does not exist until M2.
+# `Workflow.sessions` (SPEC.md §7.3's HAS_SESSION edge) arrived in M2, when
+# `schema/agentiq.graphql` did. The two documents are concatenated by
+# `tools/sdlmerge` before gopgql runs, because `--sdl` takes one file and a
+# property graph can only span `dbos.*` and `agentiq.*` if one document
+# describes both.
+#
+# `workflow_uuid` is TEXT, and is declared so here. SPEC.md §7.3 writes it
+# `ID!`, and M1 followed that; gopgql maps `ID` to uuid, which was invisible
+# while every table in this graph was `@readonly` and emitted no DDL. It stops
+# being invisible the moment `agentiq.session.workflow_uuid` — a column gopgql
+# does create — has to hold the same value: a graph whose two sides disagree is
+# rejected outright ("property \"workflow_uuid\" is text on \"agentiq.session\"
+# but uuid on \"dbos.workflow_status\"; a property name has one type across the
+# whole graph"), and one that agreed on uuid would emit an edge joining a uuid
+# column to a text one. `@column(type: "text")` states what the column is; see
+# test/drift/testdata/dbos_schema.json.
 #
 # SPEC.md §7.3 also writes `parent` and `childWorkflow` as to-one fields.
 # gopgql refuses a non-list `@relationship` field ("@relationship fields must be
@@ -44,7 +58,7 @@ type Workflow
   @node(label: "workflow", table: "workflow_status", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid"]) {
-  workflowUuid:     ID!       @column(name: "workflow_uuid")
+  workflowUuid:     ID!       @column(name: "workflow_uuid", type: "text")
   status:           String!
   name:             String!
   queueName:        String    @column(name: "queue_name")
@@ -95,6 +109,16 @@ type Workflow
     sourceKey: ["workflow_uuid"], destKey: ["parent_workflow_id"]
   )
 
+  # SPEC.md §6.2, §7.3. The edge that makes the graph span two schemas: the
+  # edge table is `agentiq.session`, which AgentIQ owns and migrates, while the
+  # source vertex is a `dbos.*` table it only reads. `agentiq.session.id` is
+  # gopgql's surrogate uuid, not ADK's session id — see schema/agentiq.graphql.
+  sessions: [Session!]! @relationship(
+    type: "HAS_SESSION", direction: OUT
+    table: "session", schema: "agentiq"
+    sourceKey: ["workflow_uuid"], destKey: ["id"]
+  )
+
   streams: [StreamValue!]! @relationship(
     type: "EMITTED", direction: OUT
     table: "streams", schema: "dbos"
@@ -106,7 +130,7 @@ type Step
   @node(label: "step", table: "operation_outputs", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid", "functionId"]) {
-  workflowUuid: ID!    @column(name: "workflow_uuid")
+  workflowUuid: ID!    @column(name: "workflow_uuid", type: "text")
   functionId:   Int!   @column(name: "function_id")
   functionName: String @column(name: "function_name")
   # TEXT holding a serializer payload, not JSON. See the note on Workflow.
@@ -124,7 +148,7 @@ type StreamValue
   @node(label: "stream_value", table: "streams", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid", "key", "seq"]) {
-  workflowUuid: ID!     @column(name: "workflow_uuid")
+  workflowUuid: ID!     @column(name: "workflow_uuid", type: "text")
   key:          String!
   seq:          Int!    @column(name: "offset") # `offset` is reserved; quoted
   # TEXT holding a serializer payload, not JSON. See the note on Workflow.

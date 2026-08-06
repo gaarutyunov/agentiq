@@ -174,6 +174,1103 @@ func gopgqlAsTime(v any) (time.Time, bool) {
 // gopgqlValue has already rejected.
 func gopgqlAsAny(v any) (any, bool) { return v, true }
 
+// EventInput is the input of Event.
+type EventInput struct {
+	SessionId string
+	AdkId     string
+}
+
+// EventEvent is one Event of the Event result.
+type EventEvent struct {
+	Id                 string
+	AdkId              string
+	SessionId          string
+	Sequence           int64
+	InvocationId       string
+	Author             string
+	Branch             *string
+	Timestamp          time.Time
+	TurnComplete       bool
+	Interrupted        bool
+	IsolationScope     *string
+	ErrorCode          *string
+	ErrorMessage       *string
+	ContentRole        *string
+	LongRunningToolIds []string
+	RequestedInput     *any
+	Routes             *any
+	NodeInfo           *any
+	GroundingMetadata  *any
+	UsageMetadata      *any
+	CitationMetadata   *any
+	CustomMetadata     *any
+	StepFunctionId     *int64
+	WorkflowUuid       *string
+	Parts              []EventEventParts
+	Actions            []EventEventActions
+}
+
+// EventEventParts is one Part of the Event result.
+type EventEventParts struct {
+	PartIndex                int64
+	Text                     *string
+	Thought                  *bool
+	ThoughtSignature         *string
+	FunctionCallId           *string
+	FunctionCallName         *string
+	FunctionCallArgs         *any
+	FunctionResponseId       *string
+	FunctionResponseName     *string
+	FunctionResponseResponse *any
+	InlineDataMimeType       *string
+	InlineDataBytes          *string
+	InlineDataDisplayName    *string
+	FileDataMimeType         *string
+	FileDataUri              *string
+	FileDataDisplayName      *string
+	ExecutableCodeLanguage   *string
+	ExecutableCodeCode       *string
+	CodeExecutionOutcome     *string
+	CodeExecutionOutput      *string
+	VideoMetadataStartOffset *string
+	VideoMetadataEndOffset   *string
+	VideoMetadataFps         *float64
+	AudioTranscription       *any
+	MediaResolution          *string
+	ToolCall                 *any
+	ToolResponse             *any
+	PartMetadata             *any
+}
+
+// EventEventActions is one Actions of the Event result.
+type EventEventActions struct {
+	SkipSummarization    *bool
+	TransferToAgent      *string
+	Escalate             *bool
+	RequestedAuthConfigs *any
+	StateDeltas          []EventEventActionsStateDeltas
+	ArtifactDeltas       []EventEventActionsArtifactDeltas
+}
+
+// EventEventActionsStateDeltas is one StateDelta of the Event result.
+type EventEventActionsStateDeltas struct {
+	Scope string
+	Key   string
+	Value any
+}
+
+// EventEventActionsArtifactDeltas is one ArtifactDelta of the Event result.
+type EventEventActionsArtifactDeltas struct {
+	Filename string
+	Version  int64
+}
+
+const eventSQL = "SELECT q0.v0_k, q0.v0_c0, q0.v0_c1, q0.v0_c2, q0.v0_c3, q0.v0_c4, q0.v0_c5, q0.v0_c6, q0.v0_c7, q0.v0_c8, q0.v0_c9, q0.v0_c10, q0.v0_c11, q0.v0_c12, q0.v0_c13, q0.v0_c14, q0.v0_c15::text AS v0_c15, q0.v0_c16::text AS v0_c16, q0.v0_c17::text AS v0_c17, q0.v0_c18::text AS v0_c18, q0.v0_c19::text AS v0_c19, q0.v0_c20::text AS v0_c20, q0.v0_c21::text AS v0_c21, q0.v0_c22, q0.v0_c23, q1.v2_k, q1.v2_c0, q1.v2_c1, q1.v2_c2, q1.v2_c3, q1.v2_c4, q1.v2_c5, q1.v2_c6::text AS v2_c6, q1.v2_c7, q1.v2_c8, q1.v2_c9::text AS v2_c9, q1.v2_c10, q1.v2_c11, q1.v2_c12, q1.v2_c13, q1.v2_c14, q1.v2_c15, q1.v2_c16, q1.v2_c17, q1.v2_c18, q1.v2_c19, q1.v2_c20, q1.v2_c21, q1.v2_c22, q1.v2_c23::text AS v2_c23, q1.v2_c24, q1.v2_c25::text AS v2_c25, q1.v2_c26::text AS v2_c26, q1.v2_c27::text AS v2_c27, q2.v4_k, q2.v4_c0, q2.v4_c1, q2.v4_c2, q2.v4_c3::text AS v4_c3, q3.v6_k, q3.v6_c0, q3.v6_c1, q3.v6_c2::text AS v6_c2, q4.v8_k, q4.v8_c0, q4.v8_c1\nFROM GRAPH_TABLE (agentiq_graph\n    MATCH (v0 IS event)\n    WHERE v0.session_id = $1 AND v0.adk_id = $2\n    COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.session_id AS v0_c2, v0.sequence AS v0_c3, v0.invocation_id AS v0_c4, v0.author AS v0_c5, v0.branch AS v0_c6, v0.timestamp AS v0_c7, v0.turn_complete AS v0_c8, v0.interrupted AS v0_c9, v0.isolation_scope AS v0_c10, v0.error_code AS v0_c11, v0.error_message AS v0_c12, v0.content_role AS v0_c13, v0.long_running_tool_ids AS v0_c14, v0.requested_input AS v0_c15, v0.routes AS v0_c16, v0.node_info AS v0_c17, v0.grounding_metadata AS v0_c18, v0.usage_metadata AS v0_c19, v0.citation_metadata AS v0_c20, v0.custom_metadata AS v0_c21, v0.step_function_id AS v0_c22, v0.workflow_uuid AS v0_c23)\n  ) AS q0\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v1 IS event) -[e0 IS \"HAS_PART\"]-> (v2 IS part)\n    COLUMNS (v1.id AS v1_j, v2.id AS v2_k, v2.part_index AS v2_c0, v2.text AS v2_c1, v2.thought AS v2_c2, v2.thought_signature AS v2_c3, v2.function_call_id AS v2_c4, v2.function_call_name AS v2_c5, v2.function_call_args AS v2_c6, v2.function_response_id AS v2_c7, v2.function_response_name AS v2_c8, v2.function_response_response AS v2_c9, v2.inline_data_mime_type AS v2_c10, v2.inline_data_bytes AS v2_c11, v2.inline_data_display_name AS v2_c12, v2.file_data_mime_type AS v2_c13, v2.file_data_uri AS v2_c14, v2.file_data_display_name AS v2_c15, v2.executable_code_language AS v2_c16, v2.executable_code_code AS v2_c17, v2.code_execution_outcome AS v2_c18, v2.code_execution_output AS v2_c19, v2.video_metadata_start_offset AS v2_c20, v2.video_metadata_end_offset AS v2_c21, v2.video_metadata_fps AS v2_c22, v2.audio_transcription AS v2_c23, v2.media_resolution AS v2_c24, v2.tool_call AS v2_c25, v2.tool_response AS v2_c26, v2.part_metadata AS v2_c27)\n  ) AS q1 ON q1.v1_j = q0.v0_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v3 IS event) -[e1 IS \"HAS_ACTIONS\"]-> (v4 IS actions)\n    COLUMNS (v3.id AS v3_j, v4.id AS v4_k, v4.skip_summarization AS v4_c0, v4.transfer_to_agent AS v4_c1, v4.escalate AS v4_c2, v4.requested_auth_configs AS v4_c3)\n  ) AS q2 ON q2.v3_j = q0.v0_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v5 IS actions) -[e2 IS \"SETS\"]-> (v6 IS state_delta)\n    COLUMNS (v5.id AS v5_j, v6.id AS v6_k, v6.scope AS v6_c0, v6.\"key\" AS v6_c1, v6.value_json AS v6_c2)\n  ) AS q3 ON q3.v5_j = q2.v4_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v7 IS actions) -[e3 IS \"PRODUCES\"]-> (v8 IS artifact_delta)\n    COLUMNS (v7.id AS v7_j, v8.id AS v8_k, v8.filename AS v8_c0, v8.version AS v8_c1)\n  ) AS q4 ON q4.v7_j = q2.v4_k\nORDER BY q0.v0_k, q1.v2_k, q2.v4_k, q3.v6_k, q4.v8_k"
+
+var eventProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "event", TypeName: "Event", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "sessionId", Property: "session_id", Column: "v0_c2", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "sequence", Property: "sequence", Column: "v0_c3", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "invocationId", Property: "invocation_id", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "author", Property: "author", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "branch", Property: "branch", Column: "v0_c6", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "timestamp", Property: "timestamp", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "turnComplete", Property: "turn_complete", Column: "v0_c8", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "interrupted", Property: "interrupted", Column: "v0_c9", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "isolationScope", Property: "isolation_scope", Column: "v0_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorCode", Property: "error_code", Column: "v0_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorMessage", Property: "error_message", Column: "v0_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "contentRole", Property: "content_role", Column: "v0_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "longRunningToolIds", Property: "long_running_tool_ids", Column: "v0_c14", GraphQLType: "String", ColumnType: "", List: true, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "requestedInput", Property: "requested_input", Column: "v0_c15", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "routes", Property: "routes", Column: "v0_c16", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "nodeInfo", Property: "node_info", Column: "v0_c17", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "groundingMetadata", Property: "grounding_metadata", Column: "v0_c18", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "usageMetadata", Property: "usage_metadata", Column: "v0_c19", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "citationMetadata", Property: "citation_metadata", Column: "v0_c20", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "customMetadata", Property: "custom_metadata", Column: "v0_c21", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "stepFunctionId", Property: "step_function_id", Column: "v0_c22", GraphQLType: "Int", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarInt}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c23", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "parts", TypeName: "Part", Alias: "v2", KeyColumns: []string{"v2_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "partIndex", Property: "part_index", Column: "v2_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "text", Property: "text", Column: "v2_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "thought", Property: "thought", Column: "v2_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "thoughtSignature", Property: "thought_signature", Column: "v2_c3", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "functionCallId", Property: "function_call_id", Column: "v2_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallName", Property: "function_call_name", Column: "v2_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallArgs", Property: "function_call_args", Column: "v2_c6", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "functionResponseId", Property: "function_response_id", Column: "v2_c7", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseName", Property: "function_response_name", Column: "v2_c8", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseResponse", Property: "function_response_response", Column: "v2_c9", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "inlineDataMimeType", Property: "inline_data_mime_type", Column: "v2_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataBytes", Property: "inline_data_bytes", Column: "v2_c11", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "inlineDataDisplayName", Property: "inline_data_display_name", Column: "v2_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataMimeType", Property: "file_data_mime_type", Column: "v2_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataUri", Property: "file_data_uri", Column: "v2_c14", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataDisplayName", Property: "file_data_display_name", Column: "v2_c15", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeLanguage", Property: "executable_code_language", Column: "v2_c16", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeCode", Property: "executable_code_code", Column: "v2_c17", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutcome", Property: "code_execution_outcome", Column: "v2_c18", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutput", Property: "code_execution_output", Column: "v2_c19", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataStartOffset", Property: "video_metadata_start_offset", Column: "v2_c20", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataEndOffset", Property: "video_metadata_end_offset", Column: "v2_c21", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataFps", Property: "video_metadata_fps", Column: "v2_c22", GraphQLType: "Float", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarFloat}, {ResponseKey: "audioTranscription", Property: "audio_transcription", Column: "v2_c23", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "mediaResolution", Property: "media_resolution", Column: "v2_c24", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "toolCall", Property: "tool_call", Column: "v2_c25", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "toolResponse", Property: "tool_response", Column: "v2_c26", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "partMetadata", Property: "part_metadata", Column: "v2_c27", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "actions", TypeName: "Actions", Alias: "v4", KeyColumns: []string{"v4_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "skipSummarization", Property: "skip_summarization", Column: "v4_c0", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "transferToAgent", Property: "transfer_to_agent", Column: "v4_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "escalate", Property: "escalate", Column: "v4_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "requestedAuthConfigs", Property: "requested_auth_configs", Column: "v4_c3", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "stateDeltas", TypeName: "StateDelta", Alias: "v6", KeyColumns: []string{"v6_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v6_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v6_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v6_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "artifactDeltas", TypeName: "ArtifactDelta", Alias: "v8", KeyColumns: []string{"v8_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "filename", Property: "filename", Column: "v8_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "version", Property: "version", Column: "v8_c1", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}}}}}}}}
+
+// Event runs the Event operation through the handle the caller supplies.
+func (c *Client) Event(ctx context.Context, h exec.Handle, in EventInput) ([]EventEvent, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        eventSQL,
+		Args:       []any{in.SessionId, in.AdkId},
+		Projection: eventProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleEventEvent("event", res["event"])
+}
+
+func assembleEventEvent(path string, v any) ([]EventEvent, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]EventEvent, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o EventEvent
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.SessionId, err = gopgqlValue(at+".sessionId", row["sessionId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Sequence, err = gopgqlValue(at+".sequence", row["sequence"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.InvocationId, err = gopgqlValue(at+".invocationId", row["invocationId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Author, err = gopgqlValue(at+".author", row["author"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Branch, err = gopgqlPointer(at+".branch", row["branch"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Timestamp, err = gopgqlValue(at+".timestamp", row["timestamp"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.TurnComplete, err = gopgqlValue(at+".turnComplete", row["turnComplete"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.Interrupted, err = gopgqlValue(at+".interrupted", row["interrupted"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.IsolationScope, err = gopgqlPointer(at+".isolationScope", row["isolationScope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ErrorCode, err = gopgqlPointer(at+".errorCode", row["errorCode"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ErrorMessage, err = gopgqlPointer(at+".errorMessage", row["errorMessage"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ContentRole, err = gopgqlPointer(at+".contentRole", row["contentRole"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.LongRunningToolIds, err = gopgqlSlice(at+".longRunningToolIds", row["longRunningToolIds"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.RequestedInput, err = gopgqlPointer(at+".requestedInput", row["requestedInput"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.Routes, err = gopgqlPointer(at+".routes", row["routes"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.NodeInfo, err = gopgqlPointer(at+".nodeInfo", row["nodeInfo"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.GroundingMetadata, err = gopgqlPointer(at+".groundingMetadata", row["groundingMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.UsageMetadata, err = gopgqlPointer(at+".usageMetadata", row["usageMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.CitationMetadata, err = gopgqlPointer(at+".citationMetadata", row["citationMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.CustomMetadata, err = gopgqlPointer(at+".customMetadata", row["customMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.StepFunctionId, err = gopgqlPointer(at+".stepFunctionId", row["stepFunctionId"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Parts, err = assembleEventEventParts(at+".parts", row["parts"]); err != nil {
+			return nil, err
+		}
+		if o.Actions, err = assembleEventEventActions(at+".actions", row["actions"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleEventEventParts(path string, v any) ([]EventEventParts, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]EventEventParts, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o EventEventParts
+		var err error
+		if o.PartIndex, err = gopgqlValue(at+".partIndex", row["partIndex"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.Text, err = gopgqlPointer(at+".text", row["text"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Thought, err = gopgqlPointer(at+".thought", row["thought"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.ThoughtSignature, err = gopgqlPointer(at+".thoughtSignature", row["thoughtSignature"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallId, err = gopgqlPointer(at+".functionCallId", row["functionCallId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallName, err = gopgqlPointer(at+".functionCallName", row["functionCallName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallArgs, err = gopgqlPointer(at+".functionCallArgs", row["functionCallArgs"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseId, err = gopgqlPointer(at+".functionResponseId", row["functionResponseId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseName, err = gopgqlPointer(at+".functionResponseName", row["functionResponseName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseResponse, err = gopgqlPointer(at+".functionResponseResponse", row["functionResponseResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.InlineDataMimeType, err = gopgqlPointer(at+".inlineDataMimeType", row["inlineDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataBytes, err = gopgqlPointer(at+".inlineDataBytes", row["inlineDataBytes"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataDisplayName, err = gopgqlPointer(at+".inlineDataDisplayName", row["inlineDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataMimeType, err = gopgqlPointer(at+".fileDataMimeType", row["fileDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataUri, err = gopgqlPointer(at+".fileDataUri", row["fileDataUri"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataDisplayName, err = gopgqlPointer(at+".fileDataDisplayName", row["fileDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeLanguage, err = gopgqlPointer(at+".executableCodeLanguage", row["executableCodeLanguage"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeCode, err = gopgqlPointer(at+".executableCodeCode", row["executableCodeCode"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutcome, err = gopgqlPointer(at+".codeExecutionOutcome", row["codeExecutionOutcome"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutput, err = gopgqlPointer(at+".codeExecutionOutput", row["codeExecutionOutput"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataStartOffset, err = gopgqlPointer(at+".videoMetadataStartOffset", row["videoMetadataStartOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataEndOffset, err = gopgqlPointer(at+".videoMetadataEndOffset", row["videoMetadataEndOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataFps, err = gopgqlPointer(at+".videoMetadataFps", row["videoMetadataFps"], gopgqlAsFloat64); err != nil {
+			return nil, err
+		}
+		if o.AudioTranscription, err = gopgqlPointer(at+".audioTranscription", row["audioTranscription"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.MediaResolution, err = gopgqlPointer(at+".mediaResolution", row["mediaResolution"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ToolCall, err = gopgqlPointer(at+".toolCall", row["toolCall"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.ToolResponse, err = gopgqlPointer(at+".toolResponse", row["toolResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.PartMetadata, err = gopgqlPointer(at+".partMetadata", row["partMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleEventEventActions(path string, v any) ([]EventEventActions, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]EventEventActions, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o EventEventActions
+		var err error
+		if o.SkipSummarization, err = gopgqlPointer(at+".skipSummarization", row["skipSummarization"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.TransferToAgent, err = gopgqlPointer(at+".transferToAgent", row["transferToAgent"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Escalate, err = gopgqlPointer(at+".escalate", row["escalate"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.RequestedAuthConfigs, err = gopgqlPointer(at+".requestedAuthConfigs", row["requestedAuthConfigs"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.StateDeltas, err = assembleEventEventActionsStateDeltas(at+".stateDeltas", row["stateDeltas"]); err != nil {
+			return nil, err
+		}
+		if o.ArtifactDeltas, err = assembleEventEventActionsArtifactDeltas(at+".artifactDeltas", row["artifactDeltas"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleEventEventActionsStateDeltas(path string, v any) ([]EventEventActionsStateDeltas, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]EventEventActionsStateDeltas, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o EventEventActionsStateDeltas
+		var err error
+		if o.Scope, err = gopgqlValue(at+".scope", row["scope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Key, err = gopgqlValue(at+".key", row["key"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Value, err = gopgqlValue(at+".value", row["value"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleEventEventActionsArtifactDeltas(path string, v any) ([]EventEventActionsArtifactDeltas, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]EventEventActionsArtifactDeltas, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o EventEventActionsArtifactDeltas
+		var err error
+		if o.Filename, err = gopgqlValue(at+".filename", row["filename"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Version, err = gopgqlValue(at+".version", row["version"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// PartInput is the input of Part.
+type PartInput struct {
+	EventId   string
+	PartIndex int64
+}
+
+// PartPart is one Part of the Part result.
+type PartPart struct {
+	EventId                  string
+	PartIndex                int64
+	Text                     *string
+	Thought                  *bool
+	ThoughtSignature         *string
+	FunctionCallId           *string
+	FunctionCallName         *string
+	FunctionCallArgs         *any
+	FunctionResponseId       *string
+	FunctionResponseName     *string
+	FunctionResponseResponse *any
+	InlineDataMimeType       *string
+	InlineDataBytes          *string
+	InlineDataDisplayName    *string
+	FileDataMimeType         *string
+	FileDataUri              *string
+	FileDataDisplayName      *string
+	ExecutableCodeLanguage   *string
+	ExecutableCodeCode       *string
+	CodeExecutionOutcome     *string
+	CodeExecutionOutput      *string
+	VideoMetadataStartOffset *string
+	VideoMetadataEndOffset   *string
+	VideoMetadataFps         *float64
+	AudioTranscription       *any
+	MediaResolution          *string
+	ToolCall                 *any
+	ToolResponse             *any
+	PartMetadata             *any
+}
+
+const partSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v0_c5, v0_c6, v0_c7::text AS v0_c7, v0_c8, v0_c9, v0_c10::text AS v0_c10, v0_c11, v0_c12, v0_c13, v0_c14, v0_c15, v0_c16, v0_c17, v0_c18, v0_c19, v0_c20, v0_c21, v0_c22, v0_c23, v0_c24::text AS v0_c24, v0_c25, v0_c26::text AS v0_c26, v0_c27::text AS v0_c27, v0_c28::text AS v0_c28\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS part)\n  WHERE v0.event_id = $1 AND v0.part_index = $2\n  COLUMNS (v0.id AS v0_k, v0.event_id AS v0_c0, v0.part_index AS v0_c1, v0.text AS v0_c2, v0.thought AS v0_c3, v0.thought_signature AS v0_c4, v0.function_call_id AS v0_c5, v0.function_call_name AS v0_c6, v0.function_call_args AS v0_c7, v0.function_response_id AS v0_c8, v0.function_response_name AS v0_c9, v0.function_response_response AS v0_c10, v0.inline_data_mime_type AS v0_c11, v0.inline_data_bytes AS v0_c12, v0.inline_data_display_name AS v0_c13, v0.file_data_mime_type AS v0_c14, v0.file_data_uri AS v0_c15, v0.file_data_display_name AS v0_c16, v0.executable_code_language AS v0_c17, v0.executable_code_code AS v0_c18, v0.code_execution_outcome AS v0_c19, v0.code_execution_output AS v0_c20, v0.video_metadata_start_offset AS v0_c21, v0.video_metadata_end_offset AS v0_c22, v0.video_metadata_fps AS v0_c23, v0.audio_transcription AS v0_c24, v0.media_resolution AS v0_c25, v0.tool_call AS v0_c26, v0.tool_response AS v0_c27, v0.part_metadata AS v0_c28)\n)\nORDER BY v0_k"
+
+var partProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "part", TypeName: "Part", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "eventId", Property: "event_id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "partIndex", Property: "part_index", Column: "v0_c1", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "text", Property: "text", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "thought", Property: "thought", Column: "v0_c3", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "thoughtSignature", Property: "thought_signature", Column: "v0_c4", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "functionCallId", Property: "function_call_id", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallName", Property: "function_call_name", Column: "v0_c6", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallArgs", Property: "function_call_args", Column: "v0_c7", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "functionResponseId", Property: "function_response_id", Column: "v0_c8", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseName", Property: "function_response_name", Column: "v0_c9", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseResponse", Property: "function_response_response", Column: "v0_c10", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "inlineDataMimeType", Property: "inline_data_mime_type", Column: "v0_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataBytes", Property: "inline_data_bytes", Column: "v0_c12", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "inlineDataDisplayName", Property: "inline_data_display_name", Column: "v0_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataMimeType", Property: "file_data_mime_type", Column: "v0_c14", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataUri", Property: "file_data_uri", Column: "v0_c15", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataDisplayName", Property: "file_data_display_name", Column: "v0_c16", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeLanguage", Property: "executable_code_language", Column: "v0_c17", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeCode", Property: "executable_code_code", Column: "v0_c18", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutcome", Property: "code_execution_outcome", Column: "v0_c19", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutput", Property: "code_execution_output", Column: "v0_c20", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataStartOffset", Property: "video_metadata_start_offset", Column: "v0_c21", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataEndOffset", Property: "video_metadata_end_offset", Column: "v0_c22", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataFps", Property: "video_metadata_fps", Column: "v0_c23", GraphQLType: "Float", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarFloat}, {ResponseKey: "audioTranscription", Property: "audio_transcription", Column: "v0_c24", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "mediaResolution", Property: "media_resolution", Column: "v0_c25", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "toolCall", Property: "tool_call", Column: "v0_c26", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "toolResponse", Property: "tool_response", Column: "v0_c27", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "partMetadata", Property: "part_metadata", Column: "v0_c28", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}}
+
+// Part runs the Part operation through the handle the caller supplies.
+func (c *Client) Part(ctx context.Context, h exec.Handle, in PartInput) ([]PartPart, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        partSQL,
+		Args:       []any{in.EventId, in.PartIndex},
+		Projection: partProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assemblePartPart("part", res["part"])
+}
+
+func assemblePartPart(path string, v any) ([]PartPart, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]PartPart, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o PartPart
+		var err error
+		if o.EventId, err = gopgqlValue(at+".eventId", row["eventId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.PartIndex, err = gopgqlValue(at+".partIndex", row["partIndex"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.Text, err = gopgqlPointer(at+".text", row["text"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Thought, err = gopgqlPointer(at+".thought", row["thought"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.ThoughtSignature, err = gopgqlPointer(at+".thoughtSignature", row["thoughtSignature"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallId, err = gopgqlPointer(at+".functionCallId", row["functionCallId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallName, err = gopgqlPointer(at+".functionCallName", row["functionCallName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallArgs, err = gopgqlPointer(at+".functionCallArgs", row["functionCallArgs"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseId, err = gopgqlPointer(at+".functionResponseId", row["functionResponseId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseName, err = gopgqlPointer(at+".functionResponseName", row["functionResponseName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseResponse, err = gopgqlPointer(at+".functionResponseResponse", row["functionResponseResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.InlineDataMimeType, err = gopgqlPointer(at+".inlineDataMimeType", row["inlineDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataBytes, err = gopgqlPointer(at+".inlineDataBytes", row["inlineDataBytes"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataDisplayName, err = gopgqlPointer(at+".inlineDataDisplayName", row["inlineDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataMimeType, err = gopgqlPointer(at+".fileDataMimeType", row["fileDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataUri, err = gopgqlPointer(at+".fileDataUri", row["fileDataUri"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataDisplayName, err = gopgqlPointer(at+".fileDataDisplayName", row["fileDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeLanguage, err = gopgqlPointer(at+".executableCodeLanguage", row["executableCodeLanguage"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeCode, err = gopgqlPointer(at+".executableCodeCode", row["executableCodeCode"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutcome, err = gopgqlPointer(at+".codeExecutionOutcome", row["codeExecutionOutcome"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutput, err = gopgqlPointer(at+".codeExecutionOutput", row["codeExecutionOutput"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataStartOffset, err = gopgqlPointer(at+".videoMetadataStartOffset", row["videoMetadataStartOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataEndOffset, err = gopgqlPointer(at+".videoMetadataEndOffset", row["videoMetadataEndOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataFps, err = gopgqlPointer(at+".videoMetadataFps", row["videoMetadataFps"], gopgqlAsFloat64); err != nil {
+			return nil, err
+		}
+		if o.AudioTranscription, err = gopgqlPointer(at+".audioTranscription", row["audioTranscription"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.MediaResolution, err = gopgqlPointer(at+".mediaResolution", row["mediaResolution"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ToolCall, err = gopgqlPointer(at+".toolCall", row["toolCall"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.ToolResponse, err = gopgqlPointer(at+".toolResponse", row["toolResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.PartMetadata, err = gopgqlPointer(at+".partMetadata", row["partMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// SessionInput is the input of Session.
+type SessionInput struct {
+	AppName string
+	UserId  string
+	AdkId   string
+}
+
+// SessionSession is one Session of the Session result.
+type SessionSession struct {
+	Id           string
+	AdkId        string
+	AppName      string
+	UserId       string
+	WorkflowUuid *string
+	AgentDigest  string
+	CreatedAt    time.Time
+	LastUpdateAt time.Time
+	Events       []SessionSessionEvents
+	State        []SessionSessionState
+}
+
+// SessionSessionEvents is one Event of the Session result.
+type SessionSessionEvents struct {
+	Id                 string
+	AdkId              string
+	Sequence           int64
+	InvocationId       string
+	Author             string
+	Branch             *string
+	Timestamp          time.Time
+	TurnComplete       bool
+	Interrupted        bool
+	IsolationScope     *string
+	ErrorCode          *string
+	ErrorMessage       *string
+	ContentRole        *string
+	LongRunningToolIds []string
+	RequestedInput     *any
+	Routes             *any
+	NodeInfo           *any
+	GroundingMetadata  *any
+	UsageMetadata      *any
+	CitationMetadata   *any
+	CustomMetadata     *any
+	StepFunctionId     *int64
+	WorkflowUuid       *string
+	Parts              []SessionSessionEventsParts
+	Actions            []SessionSessionEventsActions
+}
+
+// SessionSessionEventsParts is one Part of the Session result.
+type SessionSessionEventsParts struct {
+	PartIndex                int64
+	Text                     *string
+	Thought                  *bool
+	ThoughtSignature         *string
+	FunctionCallId           *string
+	FunctionCallName         *string
+	FunctionCallArgs         *any
+	FunctionResponseId       *string
+	FunctionResponseName     *string
+	FunctionResponseResponse *any
+	InlineDataMimeType       *string
+	InlineDataBytes          *string
+	InlineDataDisplayName    *string
+	FileDataMimeType         *string
+	FileDataUri              *string
+	FileDataDisplayName      *string
+	ExecutableCodeLanguage   *string
+	ExecutableCodeCode       *string
+	CodeExecutionOutcome     *string
+	CodeExecutionOutput      *string
+	VideoMetadataStartOffset *string
+	VideoMetadataEndOffset   *string
+	VideoMetadataFps         *float64
+	AudioTranscription       *any
+	MediaResolution          *string
+	ToolCall                 *any
+	ToolResponse             *any
+	PartMetadata             *any
+}
+
+// SessionSessionEventsActions is one Actions of the Session result.
+type SessionSessionEventsActions struct {
+	SkipSummarization    *bool
+	TransferToAgent      *string
+	Escalate             *bool
+	RequestedAuthConfigs *any
+}
+
+// SessionSessionState is one SessionState of the Session result.
+type SessionSessionState struct {
+	Scope     string
+	Key       string
+	Value     any
+	UpdatedAt time.Time
+}
+
+const sessionSQL = "SELECT q0.v0_k, q0.v0_c0, q0.v0_c1, q0.v0_c2, q0.v0_c3, q0.v0_c4, q0.v0_c5, q0.v0_c6, q0.v0_c7, q1.v2_k, q1.v2_c0, q1.v2_c1, q1.v2_c2, q1.v2_c3, q1.v2_c4, q1.v2_c5, q1.v2_c6, q1.v2_c7, q1.v2_c8, q1.v2_c9, q1.v2_c10, q1.v2_c11, q1.v2_c12, q1.v2_c13, q1.v2_c14::text AS v2_c14, q1.v2_c15::text AS v2_c15, q1.v2_c16::text AS v2_c16, q1.v2_c17::text AS v2_c17, q1.v2_c18::text AS v2_c18, q1.v2_c19::text AS v2_c19, q1.v2_c20::text AS v2_c20, q1.v2_c21, q1.v2_c22, q2.v4_k, q2.v4_c0, q2.v4_c1, q2.v4_c2, q2.v4_c3, q2.v4_c4, q2.v4_c5, q2.v4_c6::text AS v4_c6, q2.v4_c7, q2.v4_c8, q2.v4_c9::text AS v4_c9, q2.v4_c10, q2.v4_c11, q2.v4_c12, q2.v4_c13, q2.v4_c14, q2.v4_c15, q2.v4_c16, q2.v4_c17, q2.v4_c18, q2.v4_c19, q2.v4_c20, q2.v4_c21, q2.v4_c22, q2.v4_c23::text AS v4_c23, q2.v4_c24, q2.v4_c25::text AS v4_c25, q2.v4_c26::text AS v4_c26, q2.v4_c27::text AS v4_c27, q3.v6_k, q3.v6_c0, q3.v6_c1, q3.v6_c2, q3.v6_c3::text AS v6_c3, q4.v8_k, q4.v8_c0, q4.v8_c1, q4.v8_c2::text AS v8_c2, q4.v8_c3\nFROM GRAPH_TABLE (agentiq_graph\n    MATCH (v0 IS session)\n    WHERE v0.app_name = $1 AND v0.user_id = $2 AND v0.adk_id = $3\n    COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n  ) AS q0\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v1 IS session) -[e0 IS \"HAS_EVENT\"]-> (v2 IS event)\n    COLUMNS (v1.id AS v1_j, v2.id AS v2_k, v2.id AS v2_c0, v2.adk_id AS v2_c1, v2.sequence AS v2_c2, v2.invocation_id AS v2_c3, v2.author AS v2_c4, v2.branch AS v2_c5, v2.timestamp AS v2_c6, v2.turn_complete AS v2_c7, v2.interrupted AS v2_c8, v2.isolation_scope AS v2_c9, v2.error_code AS v2_c10, v2.error_message AS v2_c11, v2.content_role AS v2_c12, v2.long_running_tool_ids AS v2_c13, v2.requested_input AS v2_c14, v2.routes AS v2_c15, v2.node_info AS v2_c16, v2.grounding_metadata AS v2_c17, v2.usage_metadata AS v2_c18, v2.citation_metadata AS v2_c19, v2.custom_metadata AS v2_c20, v2.step_function_id AS v2_c21, v2.workflow_uuid AS v2_c22)\n  ) AS q1 ON q1.v1_j = q0.v0_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v3 IS event) -[e1 IS \"HAS_PART\"]-> (v4 IS part)\n    COLUMNS (v3.id AS v3_j, v4.id AS v4_k, v4.part_index AS v4_c0, v4.text AS v4_c1, v4.thought AS v4_c2, v4.thought_signature AS v4_c3, v4.function_call_id AS v4_c4, v4.function_call_name AS v4_c5, v4.function_call_args AS v4_c6, v4.function_response_id AS v4_c7, v4.function_response_name AS v4_c8, v4.function_response_response AS v4_c9, v4.inline_data_mime_type AS v4_c10, v4.inline_data_bytes AS v4_c11, v4.inline_data_display_name AS v4_c12, v4.file_data_mime_type AS v4_c13, v4.file_data_uri AS v4_c14, v4.file_data_display_name AS v4_c15, v4.executable_code_language AS v4_c16, v4.executable_code_code AS v4_c17, v4.code_execution_outcome AS v4_c18, v4.code_execution_output AS v4_c19, v4.video_metadata_start_offset AS v4_c20, v4.video_metadata_end_offset AS v4_c21, v4.video_metadata_fps AS v4_c22, v4.audio_transcription AS v4_c23, v4.media_resolution AS v4_c24, v4.tool_call AS v4_c25, v4.tool_response AS v4_c26, v4.part_metadata AS v4_c27)\n  ) AS q2 ON q2.v3_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v5 IS event) -[e2 IS \"HAS_ACTIONS\"]-> (v6 IS actions)\n    COLUMNS (v5.id AS v5_j, v6.id AS v6_k, v6.skip_summarization AS v6_c0, v6.transfer_to_agent AS v6_c1, v6.escalate AS v6_c2, v6.requested_auth_configs AS v6_c3)\n  ) AS q3 ON q3.v5_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v7 IS session) -[e3 IS \"HAS_STATE\"]-> (v8 IS session_state)\n    COLUMNS (v7.id AS v7_j, v8.id AS v8_k, v8.scope AS v8_c0, v8.\"key\" AS v8_c1, v8.value_json AS v8_c2, v8.updated_at_ts AS v8_c3)\n  ) AS q4 ON q4.v7_j = q0.v0_k\nORDER BY q0.v0_k, q1.v2_k, q2.v4_k, q3.v6_k, q4.v8_k"
+
+var sessionProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "session", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "events", TypeName: "Event", Alias: "v2", KeyColumns: []string{"v2_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v2_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v2_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "sequence", Property: "sequence", Column: "v2_c2", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "invocationId", Property: "invocation_id", Column: "v2_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "author", Property: "author", Column: "v2_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "branch", Property: "branch", Column: "v2_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "timestamp", Property: "timestamp", Column: "v2_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "turnComplete", Property: "turn_complete", Column: "v2_c7", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "interrupted", Property: "interrupted", Column: "v2_c8", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "isolationScope", Property: "isolation_scope", Column: "v2_c9", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorCode", Property: "error_code", Column: "v2_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorMessage", Property: "error_message", Column: "v2_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "contentRole", Property: "content_role", Column: "v2_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "longRunningToolIds", Property: "long_running_tool_ids", Column: "v2_c13", GraphQLType: "String", ColumnType: "", List: true, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "requestedInput", Property: "requested_input", Column: "v2_c14", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "routes", Property: "routes", Column: "v2_c15", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "nodeInfo", Property: "node_info", Column: "v2_c16", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "groundingMetadata", Property: "grounding_metadata", Column: "v2_c17", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "usageMetadata", Property: "usage_metadata", Column: "v2_c18", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "citationMetadata", Property: "citation_metadata", Column: "v2_c19", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "customMetadata", Property: "custom_metadata", Column: "v2_c20", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "stepFunctionId", Property: "step_function_id", Column: "v2_c21", GraphQLType: "Int", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarInt}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v2_c22", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "parts", TypeName: "Part", Alias: "v4", KeyColumns: []string{"v4_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "partIndex", Property: "part_index", Column: "v4_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "text", Property: "text", Column: "v4_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "thought", Property: "thought", Column: "v4_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "thoughtSignature", Property: "thought_signature", Column: "v4_c3", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "functionCallId", Property: "function_call_id", Column: "v4_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallName", Property: "function_call_name", Column: "v4_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallArgs", Property: "function_call_args", Column: "v4_c6", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "functionResponseId", Property: "function_response_id", Column: "v4_c7", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseName", Property: "function_response_name", Column: "v4_c8", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseResponse", Property: "function_response_response", Column: "v4_c9", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "inlineDataMimeType", Property: "inline_data_mime_type", Column: "v4_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataBytes", Property: "inline_data_bytes", Column: "v4_c11", GraphQLType: "String", ColumnType: "bytea", List: false, NonNull: false, Scalar: compiler.ScalarUnknown}, {ResponseKey: "inlineDataDisplayName", Property: "inline_data_display_name", Column: "v4_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataMimeType", Property: "file_data_mime_type", Column: "v4_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataUri", Property: "file_data_uri", Column: "v4_c14", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataDisplayName", Property: "file_data_display_name", Column: "v4_c15", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeLanguage", Property: "executable_code_language", Column: "v4_c16", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeCode", Property: "executable_code_code", Column: "v4_c17", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutcome", Property: "code_execution_outcome", Column: "v4_c18", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutput", Property: "code_execution_output", Column: "v4_c19", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataStartOffset", Property: "video_metadata_start_offset", Column: "v4_c20", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataEndOffset", Property: "video_metadata_end_offset", Column: "v4_c21", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataFps", Property: "video_metadata_fps", Column: "v4_c22", GraphQLType: "Float", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarFloat}, {ResponseKey: "audioTranscription", Property: "audio_transcription", Column: "v4_c23", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "mediaResolution", Property: "media_resolution", Column: "v4_c24", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "toolCall", Property: "tool_call", Column: "v4_c25", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "toolResponse", Property: "tool_response", Column: "v4_c26", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "partMetadata", Property: "part_metadata", Column: "v4_c27", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "actions", TypeName: "Actions", Alias: "v6", KeyColumns: []string{"v6_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "skipSummarization", Property: "skip_summarization", Column: "v6_c0", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "transferToAgent", Property: "transfer_to_agent", Column: "v6_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "escalate", Property: "escalate", Column: "v6_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "requestedAuthConfigs", Property: "requested_auth_configs", Column: "v6_c3", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}}}, &compiler.Selection{ResponseKey: "state", TypeName: "SessionState", Alias: "v8", KeyColumns: []string{"v8_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v8_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v8_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v8_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "updatedAt", Property: "updated_at_ts", Column: "v8_c3", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}}}
+
+// Session runs the Session operation through the handle the caller supplies.
+func (c *Client) Session(ctx context.Context, h exec.Handle, in SessionInput) ([]SessionSession, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        sessionSQL,
+		Args:       []any{in.AppName, in.UserId, in.AdkId},
+		Projection: sessionProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleSessionSession("session", res["session"])
+}
+
+func assembleSessionSession(path string, v any) ([]SessionSession, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSession, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSession
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AppName, err = gopgqlValue(at+".appName", row["appName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.UserId, err = gopgqlValue(at+".userId", row["userId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AgentDigest, err = gopgqlValue(at+".agentDigest", row["agentDigest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.LastUpdateAt, err = gopgqlValue(at+".lastUpdateAt", row["lastUpdateAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.Events, err = assembleSessionSessionEvents(at+".events", row["events"]); err != nil {
+			return nil, err
+		}
+		if o.State, err = assembleSessionSessionState(at+".state", row["state"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionEvents(path string, v any) ([]SessionSessionEvents, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionEvents, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionEvents
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Sequence, err = gopgqlValue(at+".sequence", row["sequence"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.InvocationId, err = gopgqlValue(at+".invocationId", row["invocationId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Author, err = gopgqlValue(at+".author", row["author"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Branch, err = gopgqlPointer(at+".branch", row["branch"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Timestamp, err = gopgqlValue(at+".timestamp", row["timestamp"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.TurnComplete, err = gopgqlValue(at+".turnComplete", row["turnComplete"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.Interrupted, err = gopgqlValue(at+".interrupted", row["interrupted"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.IsolationScope, err = gopgqlPointer(at+".isolationScope", row["isolationScope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ErrorCode, err = gopgqlPointer(at+".errorCode", row["errorCode"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ErrorMessage, err = gopgqlPointer(at+".errorMessage", row["errorMessage"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ContentRole, err = gopgqlPointer(at+".contentRole", row["contentRole"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.LongRunningToolIds, err = gopgqlSlice(at+".longRunningToolIds", row["longRunningToolIds"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.RequestedInput, err = gopgqlPointer(at+".requestedInput", row["requestedInput"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.Routes, err = gopgqlPointer(at+".routes", row["routes"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.NodeInfo, err = gopgqlPointer(at+".nodeInfo", row["nodeInfo"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.GroundingMetadata, err = gopgqlPointer(at+".groundingMetadata", row["groundingMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.UsageMetadata, err = gopgqlPointer(at+".usageMetadata", row["usageMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.CitationMetadata, err = gopgqlPointer(at+".citationMetadata", row["citationMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.CustomMetadata, err = gopgqlPointer(at+".customMetadata", row["customMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.StepFunctionId, err = gopgqlPointer(at+".stepFunctionId", row["stepFunctionId"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Parts, err = assembleSessionSessionEventsParts(at+".parts", row["parts"]); err != nil {
+			return nil, err
+		}
+		if o.Actions, err = assembleSessionSessionEventsActions(at+".actions", row["actions"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionEventsParts(path string, v any) ([]SessionSessionEventsParts, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionEventsParts, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionEventsParts
+		var err error
+		if o.PartIndex, err = gopgqlValue(at+".partIndex", row["partIndex"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
+		if o.Text, err = gopgqlPointer(at+".text", row["text"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Thought, err = gopgqlPointer(at+".thought", row["thought"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.ThoughtSignature, err = gopgqlPointer(at+".thoughtSignature", row["thoughtSignature"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallId, err = gopgqlPointer(at+".functionCallId", row["functionCallId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallName, err = gopgqlPointer(at+".functionCallName", row["functionCallName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionCallArgs, err = gopgqlPointer(at+".functionCallArgs", row["functionCallArgs"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseId, err = gopgqlPointer(at+".functionResponseId", row["functionResponseId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseName, err = gopgqlPointer(at+".functionResponseName", row["functionResponseName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FunctionResponseResponse, err = gopgqlPointer(at+".functionResponseResponse", row["functionResponseResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.InlineDataMimeType, err = gopgqlPointer(at+".inlineDataMimeType", row["inlineDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataBytes, err = gopgqlPointer(at+".inlineDataBytes", row["inlineDataBytes"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.InlineDataDisplayName, err = gopgqlPointer(at+".inlineDataDisplayName", row["inlineDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataMimeType, err = gopgqlPointer(at+".fileDataMimeType", row["fileDataMimeType"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataUri, err = gopgqlPointer(at+".fileDataUri", row["fileDataUri"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.FileDataDisplayName, err = gopgqlPointer(at+".fileDataDisplayName", row["fileDataDisplayName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeLanguage, err = gopgqlPointer(at+".executableCodeLanguage", row["executableCodeLanguage"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ExecutableCodeCode, err = gopgqlPointer(at+".executableCodeCode", row["executableCodeCode"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutcome, err = gopgqlPointer(at+".codeExecutionOutcome", row["codeExecutionOutcome"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CodeExecutionOutput, err = gopgqlPointer(at+".codeExecutionOutput", row["codeExecutionOutput"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataStartOffset, err = gopgqlPointer(at+".videoMetadataStartOffset", row["videoMetadataStartOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataEndOffset, err = gopgqlPointer(at+".videoMetadataEndOffset", row["videoMetadataEndOffset"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.VideoMetadataFps, err = gopgqlPointer(at+".videoMetadataFps", row["videoMetadataFps"], gopgqlAsFloat64); err != nil {
+			return nil, err
+		}
+		if o.AudioTranscription, err = gopgqlPointer(at+".audioTranscription", row["audioTranscription"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.MediaResolution, err = gopgqlPointer(at+".mediaResolution", row["mediaResolution"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.ToolCall, err = gopgqlPointer(at+".toolCall", row["toolCall"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.ToolResponse, err = gopgqlPointer(at+".toolResponse", row["toolResponse"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.PartMetadata, err = gopgqlPointer(at+".partMetadata", row["partMetadata"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionEventsActions(path string, v any) ([]SessionSessionEventsActions, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionEventsActions, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionEventsActions
+		var err error
+		if o.SkipSummarization, err = gopgqlPointer(at+".skipSummarization", row["skipSummarization"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.TransferToAgent, err = gopgqlPointer(at+".transferToAgent", row["transferToAgent"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Escalate, err = gopgqlPointer(at+".escalate", row["escalate"], gopgqlAsBool); err != nil {
+			return nil, err
+		}
+		if o.RequestedAuthConfigs, err = gopgqlPointer(at+".requestedAuthConfigs", row["requestedAuthConfigs"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionState(path string, v any) ([]SessionSessionState, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionState, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionState
+		var err error
+		if o.Scope, err = gopgqlValue(at+".scope", row["scope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Key, err = gopgqlValue(at+".key", row["key"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Value, err = gopgqlValue(at+".value", row["value"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.UpdatedAt, err = gopgqlValue(at+".updatedAt", row["updatedAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// SessionsInput is the input of Sessions.
+type SessionsInput struct {
+	AppName string
+	UserId  string
+}
+
+// SessionsSession is one Session of the Sessions result.
+type SessionsSession struct {
+	Id           string
+	AdkId        string
+	AppName      string
+	UserId       string
+	WorkflowUuid *string
+	AgentDigest  string
+	CreatedAt    time.Time
+	LastUpdateAt time.Time
+}
+
+const sessionsSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v0_c5, v0_c6, v0_c7\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS session)\n  WHERE v0.app_name = $1 AND v0.user_id = $2\n  COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n)\nORDER BY v0_k"
+
+var sessionsProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "sessions", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}
+
+// Sessions runs the Sessions operation through the handle the caller supplies.
+func (c *Client) Sessions(ctx context.Context, h exec.Handle, in SessionsInput) ([]SessionsSession, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        sessionsSQL,
+		Args:       []any{in.AppName, in.UserId},
+		Projection: sessionsProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleSessionsSession("sessions", res["sessions"])
+}
+
+func assembleSessionsSession(path string, v any) ([]SessionsSession, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionsSession, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionsSession
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AppName, err = gopgqlValue(at+".appName", row["appName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.UserId, err = gopgqlValue(at+".userId", row["userId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AgentDigest, err = gopgqlValue(at+".agentDigest", row["agentDigest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.LastUpdateAt, err = gopgqlValue(at+".lastUpdateAt", row["lastUpdateAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
 // StartAgentRunInput is the input of StartAgentRun.
 type StartAgentRunInput struct {
 	AgentDigest     string
@@ -230,7 +1327,7 @@ type WorkflowWithStepsWorkflowSteps struct {
 
 const workflowWithStepsSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v1_k0, v1_k1, v1_c0, v1_c1, v1_c2, v1_c3\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS workflow) -[e0 IS \"HAS_STEP\"]-> (v1 IS step)\n  WHERE v0.workflow_uuid = $1\n  COLUMNS (v0.workflow_uuid AS v0_k, v0.workflow_uuid AS v0_c0, v0.status AS v0_c1, v0.name AS v0_c2, v0.queue_name AS v0_c3, v0.created_at AS v0_c4, v1.workflow_uuid AS v1_k0, v1.function_id AS v1_k1, v1.function_id AS v1_c0, v1.function_name AS v1_c1, v1.output AS v1_c2, v1.error AS v1_c3)\n)\nORDER BY v0_k, v1_k0, v1_k1"
 
-var workflowWithStepsProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "workflow_status", TypeName: "Workflow", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "status", Property: "status", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "name", Property: "name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "queueName", Property: "queue_name", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at", Column: "v0_c4", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "steps", TypeName: "Step", Alias: "v1", KeyColumns: []string{"v1_k0", "v1_k1"}, Fields: []compiler.ProjectedField{{ResponseKey: "functionId", Property: "function_id", Column: "v1_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "functionName", Property: "function_name", Column: "v1_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "output", Property: "output", Column: "v1_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "error", Property: "error", Column: "v1_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}}}}}
+var workflowWithStepsProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "workflow_status", TypeName: "Workflow", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c0", GraphQLType: "ID", ColumnType: "text", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "status", Property: "status", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "name", Property: "name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "queueName", Property: "queue_name", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at", Column: "v0_c4", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "steps", TypeName: "Step", Alias: "v1", KeyColumns: []string{"v1_k0", "v1_k1"}, Fields: []compiler.ProjectedField{{ResponseKey: "functionId", Property: "function_id", Column: "v1_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "functionName", Property: "function_name", Column: "v1_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "output", Property: "output", Column: "v1_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "error", Property: "error", Column: "v1_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}}}}}
 
 // WorkflowWithSteps runs the WorkflowWithSteps operation through the handle the caller supplies.
 func (c *Client) WorkflowWithSteps(ctx context.Context, h exec.Handle, in WorkflowWithStepsInput) ([]WorkflowWithStepsWorkflow, error) {

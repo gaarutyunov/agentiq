@@ -1,0 +1,19 @@
+# SPEC.md §7.1's `Query.sessions`: every session of one user in one app, with no
+# events — the list view ADK's `session.Service.List` answers and the demo
+# renders before a session is opened.
+#
+# Same root field as `Session`; the difference is the filter. gopgql has one
+# queryable root per table and expresses "one" and "many" as how much of the
+# natural key is supplied.
+query Sessions($appName: String!, $userId: String!) {
+  sessions: session(appName: $appName, userId: $userId) {
+    id
+    adkId
+    appName
+    userId
+    workflowUuid
+    agentDigest
+    createdAt
+    lastUpdateAt
+  }
+}

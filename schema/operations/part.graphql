@@ -1,0 +1,40 @@
+# SPEC.md §7.1's `Query.part`: one part of one event, by SPEC.md §6.1's
+# `(event_id, part_index)` identity.
+#
+# Every column of `genai.Part` is selected. `Part` is one wide table and not a
+# discriminated union (D4): several of these may be set on the same part — text
+# together with thought and thoughtSignature, for instance — so a reader that
+# selects a subset cannot tell a part it understands from one it does not.
+query Part($eventId: ID!, $partIndex: Int!) {
+  part(eventId: $eventId, partIndex: $partIndex) {
+    eventId
+    partIndex
+    text
+    thought
+    thoughtSignature
+    functionCallId
+    functionCallName
+    functionCallArgs
+    functionResponseId
+    functionResponseName
+    functionResponseResponse
+    inlineDataMimeType
+    inlineDataBytes
+    inlineDataDisplayName
+    fileDataMimeType
+    fileDataUri
+    fileDataDisplayName
+    executableCodeLanguage
+    executableCodeCode
+    codeExecutionOutcome
+    codeExecutionOutput
+    videoMetadataStartOffset
+    videoMetadataEndOffset
+    videoMetadataFps
+    audioTranscription
+    mediaResolution
+    toolCall
+    toolResponse
+    partMetadata
+  }
+}
