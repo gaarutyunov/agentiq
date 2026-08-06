@@ -124,6 +124,56 @@ linters:
             - pkg: "syscall/js"
               desc: "JS interop is confined to wasmpg/"
 
+        # SPEC.md §5's package boundaries for the three packages M2 adds. The
+        # M2 acceptance calls these "depguard-enforced", and until this commit
+        # they were not enforced at all — there was no rule naming session/,
+        # dbosadk/ or model/, so "depguard clean" said nothing about any of
+        # them. A boundary nothing checks is a comment.
+        #
+        # Each of the three rules below was proven to fire by injecting the
+        # import it denies and watching the run go red; see the M2 commit.
+        #
+        # `no pgx in session/` — the acceptance's other named case — needs no
+        # rule of its own: `no-sql-outside-generated` above is `$all` minus five
+        # exemptions and session/ is not one of them.
+
+        # What keeps `session` testable against `sessiontestsuite` in isolation.
+        # It may import ADK, DBOS and generated/client; a dependency on the
+        # workflow package in particular would make the conformance suite need a
+        # registered workflow to run at all.
+        session-imports-nothing-above-it:
+          files: ["**/session/**"]
+          deny:
+            - pkg: "github.com/gaarutyunov/agentiq/workflow"
+              desc: "session/ must not import workflow (SPEC.md §5); the dependency runs the other way"
+            - pkg: "github.com/gaarutyunov/agentiq/artifact"
+              desc: "session/ must not import artifact (SPEC.md §5)"
+            - pkg: "github.com/gaarutyunov/agentiq/proxy"
+              desc: "session/ must not import proxy (SPEC.md §5)"
+
+        # What keeps `dbosadk` reusable: it is the ADK↔DBOS boundary and knows
+        # nothing about AgentIQ's schema. An import of the generated client here
+        # would tie every future consumer of the step wrappers to this project's
+        # tables.
+        dbosadk-knows-no-schema:
+          files: ["**/dbosadk/**"]
+          deny:
+            - pkg: "github.com/gaarutyunov/agentiq/generated/client"
+              desc: "dbosadk/ must not import generated/client (SPEC.md §5); it knows nothing about AgentIQ's schema"
+            - pkg: "github.com/gaarutyunov/agentiq/artifact"
+              desc: "dbosadk/ must not import artifact (SPEC.md §5)"
+
+        # What lets `model` be constructed and tested without a workflow or a
+        # database. Making a generation durable is dbosadk's job: a model that
+        # checkpointed itself could not be used outside a workflow at all.
+        model-needs-neither-dbos-nor-a-database:
+          files: ["**/model/**"]
+          deny:
+            - pkg: "github.com/dbos-inc/dbos-transact-golang/dbos"
+              desc: "model/ must not import DBOS (SPEC.md §5); durability is dbosadk's job"
+            - pkg: "github.com/gaarutyunov/agentiq/generated/client"
+              desc: "model/ must not import generated/client (SPEC.md §5)"
+
     forbidigo:
       # Types are needed so a pattern can be scoped to the package a method
       # belongs to, which is what keeps this rule from firing on any method
