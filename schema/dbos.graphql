@@ -200,4 +200,32 @@ type Mutation {
     stateDeltas: JSON! @column(name: "p_state_deltas")
     artifactDeltas: JSON! @column(name: "p_artifact_deltas")
   ): ID! @function(schema: "agentiq", name: "append_event")
+
+  # The session lifecycle half of ADK's `session.Service` (SPEC.md §8.3).
+  # Reads are not here: Query.session/sessions/event/part are compiled
+  # GRAPH_TABLE traversals, so the read model stays generated (§21) and only the
+  # writes — of which gopgql derives none — are functions.
+  #
+  # createSession is an upsert. ADK calls Create with a client-supplied session
+  # id on every turn, not once per conversation, and `sessiontestsuite` calls it
+  # repeatedly with the same id; returning the existing row is what makes that a
+  # no-op instead of a duplicate-key error, and what lets a replayed workflow
+  # find the session its first attempt made.
+  createSession(
+    adkId: String! @column(name: "p_adk_id")
+    appName: String! @column(name: "p_app_name")
+    userId: String! @column(name: "p_user_id")
+    agentDigest: String! @column(name: "p_agent_digest")
+    workflowUuid: String @column(name: "p_workflow_uuid")
+    state: JSON! @column(name: "p_state")
+  ): ID! @function(schema: "agentiq", name: "create_session")
+
+  # Returns the number of session rows removed: 1, or 0 when there was nothing
+  # to delete. Deleting an absent session is a success — ADK's Delete has no
+  # "not found" and the conformance suite calls it on sessions it never made.
+  deleteSession(
+    adkId: String! @column(name: "p_adk_id")
+    appName: String! @column(name: "p_app_name")
+    userId: String! @column(name: "p_user_id")
+  ): Int! @function(schema: "agentiq", name: "delete_session")
 }

@@ -308,15 +308,46 @@ func ApplyGraph(ctx context.Context, db DB) error {
 	if len(graph) == 0 {
 		return fmt.Errorf("migrate: no migrations in %s/; run `go generate ./...`", graphDir)
 	}
+
+	// Only the newest `CREATE PROPERTY GRAPH` is applied, and only its own Down
+	// runs first.
+	//
+	// Replaying the whole history is what this used to do, and it worked
+	// exactly as long as the history held one generation. gopgql writes a
+	// generation as a *pair* — `NNNN_..._graph_down.sql` whose Up drops the
+	// graph, then `NNNN_..._graph.sql` whose Up creates the new one — so a
+	// second generation makes the first pair's Down mean "recreate the graph as
+	// it was", naming columns the tables no longer have. Three generations in,
+	// every boot failed with:
+	//
+	//	graph/0006_dbos_graph_graph_down.sql down: ERROR: column
+	//	"thought_signature" does not exist (SQLSTATE 42703)
+	//
+	// The intermediate definitions are not state to be rebuilt. A property
+	// graph is a declaration over tables and holds no data of its own (that is
+	// the same fact this function's Down-then-Up already rests on), so the
+	// newest definition is the whole truth and every earlier one is a step in
+	// how it got written.
+	//
+	// Its Down is `DROP PROPERTY GRAPH IF EXISTS`, which is idempotent and is
+	// what clears whatever survived in IndexedDB from a previous run.
+	current := -1
 	for i := len(graph) - 1; i >= 0; i-- {
-		if _, err := db.Exec(ctx, graph[i].Down); err != nil {
-			return fmt.Errorf("migrate: %s down: %w", graph[i].Name, err)
+		if strings.Contains(graph[i].Up, "CREATE PROPERTY GRAPH") {
+			current = i
+			break
 		}
 	}
-	for _, m := range graph {
-		if _, err := db.Exec(ctx, m.Up); err != nil {
-			return fmt.Errorf("migrate: %s up: %w", m.Name, err)
-		}
+	if current < 0 {
+		return fmt.Errorf("migrate: no CREATE PROPERTY GRAPH in %s/; run `go generate ./...`", graphDir)
+	}
+
+	m := graph[current]
+	if _, err := db.Exec(ctx, m.Down); err != nil {
+		return fmt.Errorf("migrate: %s down: %w", m.Name, err)
+	}
+	if _, err := db.Exec(ctx, m.Up); err != nil {
+		return fmt.Errorf("migrate: %s up: %w", m.Name, err)
 	}
 	return nil
 }

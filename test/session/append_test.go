@@ -275,6 +275,12 @@ func TestAFailedTransactionRollsBackTheAppend(t *testing.T) {
 		return "", err
 	})
 	require.Error(t, err)
+	// Named explicitly: without this the test passes when the *inner read*
+	// fails for an unrelated reason, because that also rolls the transaction
+	// back and also leaves zero rows. It did exactly that while the bytea
+	// column was unreadable — a green test proving nothing.
+	require.ErrorContains(t, err, sentinel.Error(),
+		"the rollback must be caused by the sentinel, not by a failure in the read that precedes it")
 
 	var count int
 	require.NoError(t, pool.QueryRow(ctx,

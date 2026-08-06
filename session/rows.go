@@ -82,7 +82,7 @@ type PartRow struct {
 
 	Text             string `json:"text"`
 	Thought          bool   `json:"thought"`
-	ThoughtSignature []byte `json:"thought_signature"`
+	ThoughtSignature []byte `json:"thought_signature_b64"`
 
 	FunctionCallID   *string         `json:"function_call_id"`
 	FunctionCallName *string         `json:"function_call_name"`
@@ -93,7 +93,7 @@ type PartRow struct {
 	FunctionResponseResponse json.RawMessage `json:"function_response_response"`
 
 	InlineDataMIMEType    *string `json:"inline_data_mime_type"`
-	InlineDataBytes       []byte  `json:"inline_data_bytes"`
+	InlineDataBytes       []byte  `json:"inline_data_bytes_b64"`
 	InlineDataDisplayName *string `json:"inline_data_display_name"`
 
 	FileDataMIMEType    *string `json:"file_data_mime_type"`

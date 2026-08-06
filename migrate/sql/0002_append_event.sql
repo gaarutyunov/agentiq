@@ -95,10 +95,10 @@ BEGIN
     -- the application saw, and re-deriving it from the JSON array would be a
     -- second opinion about the same fact.
     INSERT INTO agentiq.part (
-        event_id, part_index, text, thought, thought_signature,
+        event_id, part_index, text, thought, thought_signature_b64,
         function_call_id, function_call_name, function_call_args,
         function_response_id, function_response_name, function_response_response,
-        inline_data_mime_type, inline_data_bytes, inline_data_display_name,
+        inline_data_mime_type, inline_data_bytes_b64, inline_data_display_name,
         file_data_mime_type, file_data_uri, file_data_display_name,
         executable_code_language, executable_code_code,
         code_execution_outcome, code_execution_output,
@@ -107,10 +107,10 @@ BEGIN
         part_metadata
     )
     SELECT
-        v_event_id, p.part_index, p.text, p.thought, p.thought_signature,
+        v_event_id, p.part_index, p.text, p.thought, p.thought_signature_b64,
         p.function_call_id, p.function_call_name, p.function_call_args,
         p.function_response_id, p.function_response_name, p.function_response_response,
-        p.inline_data_mime_type, p.inline_data_bytes, p.inline_data_display_name,
+        p.inline_data_mime_type, p.inline_data_bytes_b64, p.inline_data_display_name,
         p.file_data_mime_type, p.file_data_uri, p.file_data_display_name,
         p.executable_code_language, p.executable_code_code,
         p.code_execution_outcome, p.code_execution_output,

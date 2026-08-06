@@ -115,8 +115,35 @@
 # scalar and declaring one does not help: the generator rejects it with
 # "Part.sig has unsupported type \"Bytes\" (no default scalar mapping)", and
 # `@column(type: "bytea")` does not rescue it — the scalar is resolved before
-# the column type is read. The two bytea columns are therefore `String` fields
-# carrying `@column(type: "bytea")`.
+# the column type is read.
+#
+# gopgql v0.3.0's own error message recommends `String @column(type: "bytea")`
+# as the mapping to use instead. **That mapping does not survive the read
+# path**, verified against a live database:
+#
+#   gopgql: event[0].parts[2].thoughtSignature: cannot read []uint8 as string
+#
+# pgx returns a bytea column as `[]uint8` and the generated assembler's
+# `gopgqlAsString` refuses it, so every event carrying a thought signature or
+# inline data is writable and unreadable. Filed for gopgql; the round trip is
+# M2 acceptance and cannot wait on it.
+#
+# So the two byte-carrying columns are plain `text` holding **base64**. That is
+# not a downgrade dressed up: `json.Marshal` already renders a Go `[]byte` as a
+# base64 string, so the value crossing the wire into `json_populate_record` was
+# base64 either way — the only change is that the column now stores what was
+# already being sent, instead of asking Postgres to decode it into a type the
+# reader cannot decode back. Byte-identical round trip (§7.2) is unaffected:
+# base64 is exact, and `[]byte` marshals identically at both ends.
+#
+# The `_b64` suffix on the two column names is doing real work and is not
+# decoration. gopgql's migration differ does **not** detect a column *type*
+# change: dropping `type: "bytea"` from a field regenerates the client — which
+# then expects a string — and emits no `ALTER TABLE` at all, leaving the
+# database with a `bytea` column the new client cannot read. Renaming the
+# column is a change the differ does see, so the `text` column is genuinely
+# generated rather than hand-patched, and §17.3's `go generate && git diff
+# --exit-code` still means something. The name also says what is in it.
 
 # ---------------------------------------------------------------------------
 # Session
@@ -240,7 +267,7 @@ type Part
 
   text:                     String
   thought:                  Boolean
-  thoughtSignature:         String @column(name: "thought_signature", type: "bytea")
+  thoughtSignature:         String @column(name: "thought_signature_b64")
 
   functionCallId:           String @column(name: "function_call_id")
   functionCallName:         String @column(name: "function_call_name")
@@ -251,7 +278,7 @@ type Part
   functionResponseResponse: JSON   @column(name: "function_response_response", type: "json")
 
   inlineDataMimeType:       String @column(name: "inline_data_mime_type")
-  inlineDataBytes:          String @column(name: "inline_data_bytes", type: "bytea")
+  inlineDataBytes:          String @column(name: "inline_data_bytes_b64")
   inlineDataDisplayName:    String @column(name: "inline_data_display_name")
 
   fileDataMimeType:         String @column(name: "file_data_mime_type")
