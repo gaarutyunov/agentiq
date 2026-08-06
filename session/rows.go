@@ -35,109 +35,109 @@ type EventRow struct {
 	// ADKID is `adk_id`: ADK's own `Event.ID`, a free-form string. It is not
 	// the primary key — gopgql owns that as a surrogate uuid — and it cannot
 	// be, because `sessiontestsuite` appends events with IDs like "event1".
-	ADKID string
+	ADKID string `json:"adk_id"`
 	// SessionID is the surrogate uuid of the parent session, not its ADK id.
-	SessionID string
+	SessionID string `json:"session_id"`
 	// Sequence is monotonic per session and is the ordering guarantee (§7.1).
 	// It is allocated by the store, not by the caller: see [Store].
-	Sequence int
+	Sequence int `json:"sequence"`
 
-	InvocationID   string
-	Author         string
-	Branch         string
-	Timestamp      time.Time
-	TurnComplete   bool
-	Interrupted    bool
-	IsolationScope string
-	ErrorCode      string
-	ErrorMessage   string
+	InvocationID   string    `json:"invocation_id"`
+	Author         string    `json:"author"`
+	Branch         string    `json:"branch"`
+	Timestamp      time.Time `json:"timestamp"`
+	TurnComplete   bool      `json:"turn_complete"`
+	Interrupted    bool      `json:"interrupted"`
+	IsolationScope string    `json:"isolation_scope"`
+	ErrorCode      string    `json:"error_code"`
+	ErrorMessage   string    `json:"error_message"`
 
 	// ContentRole is nil exactly when `LLMResponse.Content` is nil. It is what
 	// distinguishes an absent Content from a present but empty one, since an
 	// empty Content contributes no part rows either.
-	ContentRole *string
+	ContentRole *string `json:"content_role"`
 
-	LongRunningToolIDs *[]string
+	LongRunningToolIDs *[]string `json:"long_running_tool_ids"`
 
 	// The `json` columns. A nil RawMessage is SQL NULL; a non-nil one is
 	// written verbatim, which is the whole reason §7.2 rule 1 forbids `jsonb`.
-	Routes            json.RawMessage
-	RequestedInput    json.RawMessage
-	NodeInfo          json.RawMessage
-	GroundingMetadata json.RawMessage
-	UsageMetadata     json.RawMessage
-	CitationMetadata  json.RawMessage
-	CustomMetadata    json.RawMessage
+	Routes            json.RawMessage `json:"routes"`
+	RequestedInput    json.RawMessage `json:"requested_input"`
+	NodeInfo          json.RawMessage `json:"node_info"`
+	GroundingMetadata json.RawMessage `json:"grounding_metadata"`
+	UsageMetadata     json.RawMessage `json:"usage_metadata"`
+	CitationMetadata  json.RawMessage `json:"citation_metadata"`
+	CustomMetadata    json.RawMessage `json:"custom_metadata"`
 
 	// Provenance (§6.2, §7.3): together these name the `(workflow_uuid,
 	// function_id)` of the DBOS step that produced the event.
-	StepFunctionID *int
-	WorkflowUUID   *string
+	StepFunctionID *int    `json:"step_function_id"`
+	WorkflowUUID   *string `json:"workflow_uuid"`
 }
 
 // PartRow is one row of `agentiq.part` — one wide table, not a discriminated
 // union (D4). Several groups may be set on the same row.
 type PartRow struct {
-	PartIndex int
+	PartIndex int `json:"part_index"`
 
-	Text             string
-	Thought          bool
-	ThoughtSignature []byte
+	Text             string `json:"text"`
+	Thought          bool   `json:"thought"`
+	ThoughtSignature []byte `json:"thought_signature"`
 
-	FunctionCallID   *string
-	FunctionCallName *string
-	FunctionCallArgs json.RawMessage
+	FunctionCallID   *string         `json:"function_call_id"`
+	FunctionCallName *string         `json:"function_call_name"`
+	FunctionCallArgs json.RawMessage `json:"function_call_args"`
 
-	FunctionResponseID       *string
-	FunctionResponseName     *string
-	FunctionResponseResponse json.RawMessage
+	FunctionResponseID       *string         `json:"function_response_id"`
+	FunctionResponseName     *string         `json:"function_response_name"`
+	FunctionResponseResponse json.RawMessage `json:"function_response_response"`
 
-	InlineDataMIMEType    *string
-	InlineDataBytes       []byte
-	InlineDataDisplayName *string
+	InlineDataMIMEType    *string `json:"inline_data_mime_type"`
+	InlineDataBytes       []byte  `json:"inline_data_bytes"`
+	InlineDataDisplayName *string `json:"inline_data_display_name"`
 
-	FileDataMIMEType    *string
-	FileDataURI         *string
-	FileDataDisplayName *string
+	FileDataMIMEType    *string `json:"file_data_mime_type"`
+	FileDataURI         *string `json:"file_data_uri"`
+	FileDataDisplayName *string `json:"file_data_display_name"`
 
-	ExecutableCodeLanguage *string
-	ExecutableCodeCode     *string
+	ExecutableCodeLanguage *string `json:"executable_code_language"`
+	ExecutableCodeCode     *string `json:"executable_code_code"`
 
-	CodeExecutionOutcome *string
-	CodeExecutionOutput  *string
+	CodeExecutionOutcome *string `json:"code_execution_outcome"`
+	CodeExecutionOutput  *string `json:"code_execution_output"`
 
-	VideoMetadataStartOffset *string
-	VideoMetadataEndOffset   *string
-	VideoMetadataFPS         *float64
+	VideoMetadataStartOffset *string  `json:"video_metadata_start_offset"`
+	VideoMetadataEndOffset   *string  `json:"video_metadata_end_offset"`
+	VideoMetadataFPS         *float64 `json:"video_metadata_fps"`
 
-	MediaResolution *string
+	MediaResolution *string `json:"media_resolution"`
 
-	AudioTranscription json.RawMessage
-	ToolCall           json.RawMessage
-	ToolResponse       json.RawMessage
-	PartMetadata       json.RawMessage
+	AudioTranscription json.RawMessage `json:"audio_transcription"`
+	ToolCall           json.RawMessage `json:"tool_call"`
+	ToolResponse       json.RawMessage `json:"tool_response"`
+	PartMetadata       json.RawMessage `json:"part_metadata"`
 }
 
 // ActionsRow is the 0..1 `agentiq.actions` row of an event.
 type ActionsRow struct {
-	SkipSummarization    bool
-	TransferToAgent      string
-	Escalate             bool
-	RequestedAuthConfigs json.RawMessage
+	SkipSummarization    bool            `json:"skip_summarization"`
+	TransferToAgent      string          `json:"transfer_to_agent"`
+	Escalate             bool            `json:"escalate"`
+	RequestedAuthConfigs json.RawMessage `json:"requested_auth_configs"`
 }
 
 // StateDeltaRow is one key of an event's `EventActions.StateDelta`, already
 // projected onto its §6.4 scope. No row here ever carries `temp`.
 type StateDeltaRow struct {
-	Scope string
-	Key   string
-	Value json.RawMessage
+	Scope string          `json:"scope"`
+	Key   string          `json:"key"`
+	Value json.RawMessage `json:"value_json"`
 }
 
 // ArtifactDeltaRow is one entry of an event's `EventActions.ArtifactDelta`.
 type ArtifactDeltaRow struct {
-	Filename string
-	Version  int
+	Filename string `json:"filename"`
+	Version  int    `json:"version"`
 }
 
 // EventRows is everything one `session.Event` becomes: rows across five tables,

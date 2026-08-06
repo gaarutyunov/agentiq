@@ -315,10 +315,22 @@ One key of an event's `EventActions.StateDelta`.
 (SPEC.md §6.4). `temp:` keys are dropped on write and are absent on read — the
 one intentional deviation from SPEC.md §7.2, asserted by its own test — so no
 row here ever carries `scope = 'temp'`.
+
+The natural key is `(eventId, scope, key)` and **not** §7.1's
+`["event_id", "key"]`. §7.1 is wrong there, and provably: the ADK key is
+stripped of its prefix before it is stored, because the scope column already
+carries it — so an event setting both `app:theme` and `user:theme` writes two
+rows whose `key` is `theme`, and a UNIQUE over `(event_id, key)` rejects the
+second with a constraint violation on a completely legitimate event.
+
+`SessionState` next door already keys on `(sessionId, scope, key)` for exactly
+this reason; the two were simply inconsistent. Storing the prefixed key instead
+would have been the other fix, and is worse: it says the same thing twice and
+then disagrees with itself the first time one of the two is written wrong.
 """
 type StateDelta
   @node(label: "state_delta", table: "state_delta", schema: "agentiq")
-  @key(fields: ["eventId", "key"]) {
+  @key(fields: ["eventId", "scope", "key"]) {
   id:        ID!
   actionsId: ID!     @column(name: "actions_id")
   eventId:   ID!     @column(name: "event_id")

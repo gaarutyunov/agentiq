@@ -261,7 +261,18 @@ func Apply(ctx context.Context, db DB) error {
 	if err != nil {
 		return err
 	}
-	recorded := append(append([]Migration{}, own[1:]...), tables...)
+	// Tables before the rest of `sql/`, and the order is load-bearing from
+	// `sql/0002` on: everything AgentIQ hand-writes after the bootstrap builds
+	// *on top of* the generated tables. `0002_append_event.sql` creates a
+	// function over `agentiq.event`, `agentiq.part` and four more.
+	//
+	// PostgreSQL would in fact accept that function against a database with no
+	// such tables — a plpgsql body gets a syntax check at CREATE time and its
+	// names are resolved on first execution — so getting this backwards fails
+	// nowhere near here, at the first append, as "relation does not exist" from
+	// inside a function that was created without complaint. The dependency is
+	// real either way, so it is expressed here rather than left to that.
+	recorded := append(append([]Migration{}, tables...), own[1:]...)
 
 	applied, err := appliedVersions(ctx, db)
 	if err != nil {

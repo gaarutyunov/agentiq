@@ -174,6 +174,37 @@ func gopgqlAsTime(v any) (time.Time, bool) {
 // gopgqlValue has already rejected.
 func gopgqlAsAny(v any) (any, bool) { return v, true }
 
+// AppendEventInput is the input of AppendEvent.
+type AppendEventInput struct {
+	SessionId      string
+	Event          any
+	Parts          any
+	Actions        any
+	StateDeltas    any
+	ArtifactDeltas any
+}
+
+const appendEventSQL = "SELECT agentiq.append_event(p_session_id => $1, p_event => $2, p_parts => $3, p_actions => $4, p_state_deltas => $5, p_artifact_deltas => $6)"
+
+// AppendEvent calls agentiq.append_event through the handle the caller supplies.
+//
+// A failure the function itself raised arrives as an *exec.FunctionError
+// carrying its SQLSTATE, reachable with errors.As.
+func (c *Client) AppendEvent(ctx context.Context, h exec.Handle, in AppendEventInput) (string, error) {
+	v, err := exec.Call(ctx, h, &compiler.CompiledCall{
+		SQL:      appendEventSQL,
+		Args:     []any{in.SessionId, in.Event, in.Parts, in.Actions, in.StateDeltas, in.ArtifactDeltas},
+		Returns:  sdl.ReturnScalar,
+		Schema:   "agentiq",
+		Function: "append_event",
+	})
+	if err != nil {
+		var zero string
+		return zero, err
+	}
+	return gopgqlValue("AppendEvent", v, gopgqlAsString)
+}
+
 // EventInput is the input of Event.
 type EventInput struct {
 	SessionId string

@@ -178,6 +178,36 @@ type Mutation {
     deduplicationId: String @column(name: "deduplication_id")
     priority: Int @column(name: "priority")
   ): String! @function(schema: "dbos", name: "enqueue_workflow")
+
+  # SPEC.md §8.3 and D2: one event, five tables, one call.
+  #
+  # It is a `@function` and not a generated write because gopgql has no
+  # generated writes — "gopgql derives no writes of its own; there is no
+  # generated `createPerson` and no inferred input type — it calls what the SDL
+  # names". `agentiq.append_event` is created by migrate/sql/0002.
+  #
+  # One call rather than five is what makes D2 reachable. `RunAsTransaction`
+  # commits the step checkpoint in the caller's transaction; five round-trips
+  # from Go would put the checkpoint atomically with only the last of them, and
+  # a crash between the third and the fourth would leave an event with some of
+  # its parts and a checkpoint saying it was appended.
+  #
+  # The five documents are JSON rather than typed arguments because the rows
+  # they carry have around seventy columns between them, and a seventy-argument
+  # PL/pgSQL signature is one whose call sites go wrong silently. Postgres
+  # unpacks them with `json_populate_record`, so the column names are checked by
+  # the server against the real tables rather than by position.
+  #
+  # This field sits in the `dbos.*` document only because a GraphQL document has
+  # one `type Mutation`, and this is where it is declared. It is AgentIQ's own.
+  appendEvent(
+    sessionId: ID! @column(name: "p_session_id")
+    event: JSON! @column(name: "p_event")
+    parts: JSON! @column(name: "p_parts")
+    actions: JSON! @column(name: "p_actions")
+    stateDeltas: JSON! @column(name: "p_state_deltas")
+    artifactDeltas: JSON! @column(name: "p_artifact_deltas")
+  ): ID! @function(schema: "agentiq", name: "append_event")
 }
 
 # --- ../schema/agentiq.graphql ------------------------------------------------------------
@@ -499,10 +529,22 @@ One key of an event's `EventActions.StateDelta`.
 (SPEC.md §6.4). `temp:` keys are dropped on write and are absent on read — the
 one intentional deviation from SPEC.md §7.2, asserted by its own test — so no
 row here ever carries `scope = 'temp'`.
+
+The natural key is `(eventId, scope, key)` and **not** §7.1's
+`["event_id", "key"]`. §7.1 is wrong there, and provably: the ADK key is
+stripped of its prefix before it is stored, because the scope column already
+carries it — so an event setting both `app:theme` and `user:theme` writes two
+rows whose `key` is `theme`, and a UNIQUE over `(event_id, key)` rejects the
+second with a constraint violation on a completely legitimate event.
+
+`SessionState` next door already keys on `(sessionId, scope, key)` for exactly
+this reason; the two were simply inconsistent. Storing the prefixed key instead
+would have been the other fix, and is worse: it says the same thing twice and
+then disagrees with itself the first time one of the two is written wrong.
 """
 type StateDelta
   @node(label: "state_delta", table: "state_delta", schema: "agentiq")
-  @key(fields: ["eventId", "key"]) {
+  @key(fields: ["eventId", "scope", "key"]) {
   id:        ID!
   actionsId: ID!     @column(name: "actions_id")
   eventId:   ID!     @column(name: "event_id")
