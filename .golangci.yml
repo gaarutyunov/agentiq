@@ -82,8 +82,22 @@ linters:
         # `//go:build js && wasm`, and golangci-lint skips build-constrained
         # files, so these four imports are only visible under
         # `GOOS=js GOARCH=wasm` — which is what `make lint-wasm` is for.
+        # migrate/ is a fifth. AgentIQ owns three things no generated client can
+        # execute: the `CREATE SCHEMA agentiq` gopgql refuses to emit by design
+        # (`sdl/readonly.go`: "a schema it does not own is not its to create"),
+        # gopgql's own `CREATE TABLE` history, and the `CREATE PROPERTY GRAPH`
+        # that spans both schemas. DDL has to be run by something holding a
+        # writable handle, and gopgql's only pool constructor sets
+        # `default_transaction_read_only=on`.
+        #
+        # Confining it to one package is the point of the package. Before it,
+        # the same sequence was open-coded in `test/harness` and `demo/wasm` and
+        # missing entirely from `cmd/agentiq`; the alternative to this exemption
+        # is a pgx import in `cmd/`, which is the one place §21 least wants one.
+        # Note that `migrate/` executes no *queries*: everything the programs
+        # read still goes through the generated client.
         no-sql-outside-generated:
-          files: ["$all", "!**/generated/**", "!**/wasmpg/**", "!**/test/**", "!**/demo/wasm/**"]
+          files: ["$all", "!**/generated/**", "!**/wasmpg/**", "!**/test/**", "!**/demo/wasm/**", "!**/migrate/**"]
           deny:
             - pkg: "github.com/jackc/pgx/v5"
               desc: "pgx is confined to generated/, wasmpg/, demo/wasm/ and the test fixtures"
@@ -168,6 +182,17 @@ linters:
       #
       # Everything the page actually reads goes through the generated client.
       - path: '(^|/)demo/wasm/'
+        linters:
+          - rawsql
+          - forbidigo
+
+      # migrate/ applies AgentIQ's own DDL, for the reasons the depguard block
+      # above sets out. Its SQL is embedded files rather than string literals —
+      # rawsql would not see it either way — except for two statements against
+      # the migration ledger, which is bookkeeping about migrations and
+      # deliberately not in the SDL: a table in the SDL is a vertex of
+      # `agentiq_graph`.
+      - path: '(^|/)migrate/'
         linters:
           - rawsql
           - forbidigo

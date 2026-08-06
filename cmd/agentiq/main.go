@@ -24,6 +24,7 @@ import (
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
 	"github.com/spf13/cobra"
 
+	"github.com/gaarutyunov/agentiq/migrate"
 	"github.com/gaarutyunov/agentiq/workflow"
 )
 
@@ -86,6 +87,21 @@ func serve(parent context.Context, addr string) error {
 		return fmt.Errorf("dbos context: %w", err)
 	}
 	defer func() { _ = dbos.Shutdown(dbosCtx, shutdownTimeout) }()
+
+	// After NewContext, before Launch. NewContext is what runs `dbos migrate`,
+	// and the property graph applied below projects `dbos.*` — applying it
+	// first fails with "relation does not exist". Launch, in turn, starts
+	// recovering workflows, and a recovered run appends session events into
+	// tables that have to be there already.
+	//
+	// This call is new in M2 and its absence was a real gap rather than a
+	// simplification: the server created no `agentiq` schema, applied no table
+	// history and applied no property graph, and only the browser demo — which
+	// did all three in a copy of the sequence — made that look like it worked.
+	// See migrate/migrate.go.
+	if err := migrate.Run(ctx, databaseURL); err != nil {
+		return err
+	}
 
 	concurrency, err := envInt("AGENTIQ_QUEUE_CONCURRENCY")
 	if err != nil {

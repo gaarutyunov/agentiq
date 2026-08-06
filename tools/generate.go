@@ -24,9 +24,27 @@
 // than rewriting what is there. Never delete the directory to "start clean" once
 // any database has applied a migration from it — that changes what a deployed
 // database is migrated from. See `generated/graph/README.md`.
+//
+// # The copies into migrate/
+//
+// The last two directives mirror gopgql's two SQL histories into `migrate/`,
+// which embeds and applies them (migrate/migrate.go). //go:embed cannot
+// reference a parent directory, so the files cannot be embedded where they are
+// written, and a copy that the SPEC.md §17.3 drift gate checks is a build step
+// rather than a fork.
+//
+// They live here, after the generator directives, rather than beside the
+// package that embeds them, and that ordering is the reason. `go generate ./...`
+// walks packages in import-path order, so a directive in `migrate/` would run
+// before the `tools/` directives that produce what it copies — and would copy
+// the *previous* run's output. Two consecutive `go generate` runs would then be
+// needed before `git diff --exit-code` came back clean, which is exactly the
+// failure §17.3's gate is supposed to report rather than exhibit.
 package tools
 
 //go:generate go run ./sdlmerge -out ../generated/schema/agentiq.graphql ../schema/dbos.graphql ../schema/agentiq.graphql
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../generated/schema/agentiq.graphql --dir ../generated/migrations --name agentiq --no-graph
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../generated/schema/agentiq.graphql --dir ../generated/graph --name dbos_graph --graph agentiq_graph
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate client --sdl ../generated/schema/agentiq.graphql --operations ../schema/operations --out ../generated/client --package client --graph agentiq_graph
+//go:generate go run ./copysql -src ../generated/migrations -dst ../migrate/tables
+//go:generate go run ./copysql -src ../generated/graph -dst ../migrate/graph
