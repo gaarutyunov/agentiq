@@ -70,6 +70,8 @@ github.com/felixge/httpsnoop v1.1.0 h1:3YtUj32ZZkqZtt3sZZsClsymw/QDuVfpNhoA31zeO
 github.com/felixge/httpsnoop v1.1.0/go.mod h1:Zqxgdd+1Rkcz8euOqdr7lqgCRJztwr5hp9vDSi5UZCE=
 github.com/gaarutyunov/gopgql v0.2.2 h1:to6gR88M3uI3D4E2u7Lqx5AQOEz3elYLZ5UnDbPuqsg=
 github.com/gaarutyunov/gopgql v0.2.2/go.mod h1:+ea9A1piqdc/lgv56yVySAni8SJIr4FTSMDup778gbg=
+github.com/gaarutyunov/gopgql v0.3.0 h1:mUHkeHwmWTwd6FoyXeQLfyvJT3LT/+pIykgAHb9Twdw=
+github.com/gaarutyunov/gopgql v0.3.0/go.mod h1:KtT7zu0nTVh4QWfV/BszPhvXXPWEpcat0k67qD3SotM=
 github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2 h1:iizUGZ9pEquQS5jTGkh4AqeeHCMbfbjeb0zMt0aEFzs=
 github.com/go-json-experiment/json v0.0.0-20250725192818-e39067aee2d2/go.mod h1:TiCD2a1pcmjd7YnhGH0f/zKNcCD06B029pHhzV23c2M=
 github.com/go-logr/logr v1.2.2/go.mod h1:jdQByPbusPIv2/zmleS9BjJVeZ6kBagPoEUsqbVz/1A=

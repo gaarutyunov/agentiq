@@ -8,6 +8,7 @@ import (
 
 	"github.com/gaarutyunov/agentiq/generated/client"
 	"github.com/gaarutyunov/agentiq/migrate"
+	"github.com/gaarutyunov/gopgql/exec"
 )
 
 // OpenPool opens a writable pool and registers its close.
@@ -57,7 +58,11 @@ func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
 // hand-written SQL, and a suite that hand-wrote this query would be asserting
 // on a query M1 does not ship.
 func GraphWorkflow(ctx context.Context, pool *pgxpool.Pool, id string) ([]client.WorkflowWithStepsWorkflow, error) {
-	rows, err := client.New().WorkflowWithSteps(ctx, pool, client.WorkflowWithStepsInput{WorkflowUuid: id})
+	// exec.Pgx adapts the pgx pool to gopgql's portable handle. Since gopgql
+	// v0.3.0 `exec.Handle` is defined over gopgql's own Cursor/Tag types rather
+	// than pgx's, which is what lets a `dbos.Tx` reach the same generated
+	// methods — the adapter is the price of that, and it is one call.
+	rows, err := client.New().WorkflowWithSteps(ctx, exec.Pgx(pool), client.WorkflowWithStepsInput{WorkflowUuid: id})
 	if err != nil {
 		return nil, fmt.Errorf("harness: graph query: %w", err)
 	}

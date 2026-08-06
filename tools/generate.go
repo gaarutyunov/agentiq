@@ -44,7 +44,7 @@ package tools
 
 //go:generate go run ./sdlmerge -out ../generated/schema/agentiq.graphql ../schema/dbos.graphql ../schema/agentiq.graphql
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../generated/schema/agentiq.graphql --dir ../generated/migrations --name agentiq --no-graph
-//go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../generated/schema/agentiq.graphql --dir ../generated/graph --name dbos_graph --graph agentiq_graph
+//go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate --sdl ../generated/schema/agentiq.graphql --dir ../generated/graph --name dbos_graph --graph agentiq_graph --no-tables
 //go:generate go run github.com/gaarutyunov/gopgql/cmd/gopgql generate client --sdl ../generated/schema/agentiq.graphql --operations ../schema/operations --out ../generated/client --package client --graph agentiq_graph
 //go:generate go run ./copysql -src ../generated/migrations -dst ../migrate/tables
 //go:generate go run ./copysql -src ../generated/graph -dst ../migrate/graph

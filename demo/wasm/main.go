@@ -77,6 +77,7 @@ import (
 	"time"
 
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
+	"github.com/gaarutyunov/gopgql/exec"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -387,7 +388,7 @@ func (a *app) list(ctx context.Context) ([]workflowRow, error) {
 		// stop showing the first. It also stops a failing traversal from
 		// turning the refresh loop into a hot loop that starves the queue
 		// worker of connections, which is exactly what it did.
-		found, err := a.client.WorkflowWithSteps(ctx, a.pool, client.WorkflowWithStepsInput{WorkflowUuid: s.ID})
+		found, err := a.client.WorkflowWithSteps(ctx, exec.Pgx(a.pool), client.WorkflowWithStepsInput{WorkflowUuid: s.ID})
 		if err != nil {
 			row.StepsError = err.Error()
 			rows = append(rows, row)
