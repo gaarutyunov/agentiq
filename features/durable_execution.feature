@@ -96,21 +96,16 @@ Feature: Durable workflow execution
   # generated client's, compiled from schema/operations/workflow_with_steps.graphql
   # — no hand-written SQL (SPEC.md §21).
   #
-  # @blocked-gopgql: this scenario CANNOT pass with the pinned gopgql v0.2.1,
-  # and the reason is upstream, not here. gopgql's shaper canonicalises every
-  # `Int` to a json.Number (shape/canonical.go, normaliseInt) while the client
-  # it generates decodes with a gopgqlAsInt64 that accepts only int/int16/
-  # int32/int64. Every Int field in every generated client is therefore
-  # undecodable, and this traversal has four of them — including
-  # `Step.functionId`, which is a key column and cannot be typed around:
+  # This scenario spent a while excluded behind a @blocked-gopgql tag, because
+  # gopgql v0.2.1's shaper canonicalised every `Int` to a json.Number that the
+  # client it generated could not decode:
   #
   #   gopgql: workflow_status[0].createdAt: cannot read json.Number as int64
   #
-  # The scenario stays here because it *is* the acceptance criterion, and
-  # deleting it would make the milestone look complete. It is excluded from the
-  # suite's tag filter until a gopgql release fixes the decoder; the exclusion
-  # is one word in test/durable/durable_test.go and nothing else has to change.
-  @blocked-gopgql
+  # v0.2.2 decodes the canonical form and the exclusion is gone. It is recorded
+  # here rather than dropped silently because the scenario was the acceptance
+  # criterion the whole time it could not run, and an exclusion that outlives
+  # its cause is how a milestone comes to look complete.
   Scenario: The property graph returns the workflow with its steps
     Given a running worker process
     And the generated property graph is applied

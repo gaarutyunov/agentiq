@@ -43,13 +43,7 @@ func TestDurableExecution(t *testing.T) {
 
 	s := &suite{pg: pg, ctx: ctx}
 
-	// ~@blocked-gopgql excludes the one scenario that cannot pass with the
-	// pinned gopgql v0.2.1 — its shaper canonicalises every Int to a
-	// json.Number that the client it generates cannot decode. The reason is
-	// written out in full above that scenario in
-	// features/durable_execution.feature. Delete the exclusion the day a
-	// gopgql release fixes gopgqlAsInt64; nothing else has to change.
-	opts, err := harness.GodogOptions(t, "@integration && ~@blocked-gopgql", "durable-junit.xml")
+	opts, err := harness.GodogOptions(t, "@integration", "durable-junit.xml")
 	require.NoError(t, err)
 
 	status := godog.TestSuite{
