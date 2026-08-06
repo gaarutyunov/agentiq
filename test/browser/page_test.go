@@ -1,0 +1,562 @@
+//go:build browser
+
+package browser
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"strings"
+	"time"
+
+	"github.com/chromedp/cdproto/page"
+	"github.com/chromedp/cdproto/runtime"
+	"github.com/chromedp/chromedp"
+)
+
+// The page's contract, as demo/web/index.html declares it and demo/wasm/ui.go
+// drives it.
+//
+// The page is rendered for a person and published for a machine, and this suite
+// only talks to the second half: it presses two buttons and reads one JSON
+// node. Nothing below asserts on rendered text — SPEC.md §14.4 puts the
+// runtime's own account of itself in [selState] precisely so it does not have
+// to. That is also why the other ids the page drives — #stage, #runs, #probe,
+// #shape, #shim-error, #facts, #log, #error — are absent here rather than
+// listed and unused: every one of them shows a value the state element already
+// carries, and asserting on the rendering as well would be two contracts to
+// keep current for one fact.
+const (
+	// selStart enqueues one workflow. It stays disabled until the runtime is
+	// up, which is one more reason readiness is waited on rather than assumed.
+	selStart = "#start"
+
+	// selBadSQL runs the deliberately invalid statement behind failure-matrix
+	// row F20 (demo/wasm/main.go, invalidStatement).
+	selBadSQL = "#bad-sql"
+
+	// selState is the <script type="application/json"> that demo/wasm/ui.go
+	// republishes on every state change. It is not a rendered element, so it is
+	// read through textContent and never through chromedp.Text, which wants a
+	// visible node.
+	selState = "#agentiq-state"
+)
+
+// pageContract is the version demo/web/boot.js declares on `window.agentiq`.
+//
+// boot.js bumps it when an element id is removed or renamed — adding one is not
+// a break — so that a suite written against an older page fails here, on one
+// legible assertion, instead of fifty selectors later on a confusing claim
+// about an empty string. Bumping it there is meant to break this constant.
+const pageContract = 1
+
+// stateJS reads [selState] without requiring the node to be visible.
+const stateJS = `document.getElementById("agentiq-state")?.textContent ?? ""`
+
+// readyJS waits for the runtime to come up, and it does the waiting *inside the
+// page*.
+//
+// That is the whole point of it, and it is the correction to how this suite was
+// first written. Runtime.evaluate is serviced on the page's main thread, and
+// the Go runtime and PGlite's wasm module hold that thread in long synchronous
+// stretches while the page boots — instantiating 25 MB of wasm, then initdb,
+// the dbos migrations, the property graph and the notification probe. A Go-side
+// poll loop issues a fresh read every interval and gives each one a deadline;
+// every one of those deadlines expires unanswered, so the loop learns nothing
+// and the page's actual progress is invisible to it. Against the deployed
+// preview that produced eight minutes of `context deadline exceeded` and the
+// conclusion that boot.js had never published window.agentiq, which was false.
+//
+// One evaluated promise inverts it. The expression is dispatched once; the
+// polling happens on the page's own event loop, between the stretches rather
+// than against them; and the single CDP reply arrives when the answer exists.
+// The read is queued instead of abandoned, which is the only way to observe a
+// single-threaded page that is busy being observed.
+//
+// It resolves on three outcomes, not one: ready, the runtime reporting a
+// failed stage, and boot.js's own catch — which writes stage "failed" into the
+// state element without a working contract if the module graph itself did not
+// load. Resolving on all three is what turns a dead page into an explanation
+// rather than into the boot timeout.
+//
+// And it always resolves. Given its own budget it answers with whatever the
+// page had reached when the budget ran out, rather than leaving Go to cancel a
+// read and report a deadline. The difference matters: a cancelled read says
+// only that nothing came back, so the failure has to be diagnosed by asking the
+// page a second question — which, if the page is wedged, cannot be answered
+// either. Resolving late with a partial answer means every failure below
+// carries the runtime's own stage and log.
+const readyJSFormat = `
+new Promise((resolve) => {
+  const deadline = performance.now() + %d;
+  const read = () => {
+    const node = document.getElementById("agentiq-state");
+    const raw = (node && node.textContent) || "";
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  };
+  const tick = () => {
+    const contract = (window.agentiq && window.agentiq.contract) || 0;
+    const state = read();
+    const settled = state && (state.ready === true || state.stage === "failed");
+    if (settled && (contract || state.stage === "failed")) {
+      resolve(JSON.stringify({ contract: contract, state: state }));
+      return;
+    }
+    if (performance.now() >= deadline) {
+      resolve(JSON.stringify({ contract: contract, state: state, timedOut: true }));
+      return;
+    }
+    setTimeout(tick, 250);
+  };
+  tick();
+})`
+
+// readySnapshot is what [readyJS] resolves with: the contract boot.js declared
+// and the state the runtime had reached when it settled.
+type readySnapshot struct {
+	Contract int       `json:"contract"`
+	State    pageState `json:"state"`
+	// TimedOut is set when the page answered because its own budget ran out
+	// rather than because the runtime settled.
+	TimedOut bool `json:"timedOut"`
+}
+
+// awaitPromise makes chromedp wait for an evaluated expression's promise to
+// settle rather than returning the promise object. Without it [readyJS] is a
+// pending Promise the moment it is created and the wait means nothing.
+func awaitPromise(p *runtime.EvaluateParams) *runtime.EvaluateParams {
+	return p.WithAwaitPromise(true)
+}
+
+// pageState mirrors demo/wasm/ui.go's pageState.
+//
+// It is a mirror rather than an import because the original lives in a
+// `js && wasm` package main that a host build cannot see. The JSON tags are the
+// contract; a field the page stops publishing decodes as its zero value, so
+// every assertion below checks the field it reads rather than trusting that it
+// arrived.
+//
+// Only the parts this suite reads or reports are mirrored. The rest of the
+// state — the pool counters, the execProtocol result shapes — is on the page
+// for a person, and copying it here would be a second contract to keep current
+// for no assertion's sake.
+type pageState struct {
+	Stage     string        `json:"stage"`
+	Ready     bool          `json:"ready"`
+	Error     string        `json:"error"`
+	Runtime   runtimeFacts  `json:"runtime"`
+	Probe     notifyProbe   `json:"notificationProbe"`
+	Workflows []workflowRow `json:"workflows"`
+	ShimError *shimError    `json:"shimError"`
+	Log       []string      `json:"log"`
+}
+
+type runtimeFacts struct {
+	PGliteVersion string `json:"pgliteVersion"`
+	ServerVersion string `json:"serverVersion"`
+	Launched      bool   `json:"dbosLaunched"`
+	Recovered     int    `json:"workflowsFoundAtStartup"`
+}
+
+// notifyProbe mirrors demo/wasm/probe.go's notifyProbe: what LISTEN/NOTIFY did
+// when the page ran it across two logical connections, before dbos.Launch.
+//
+// CallbackHits and InlineFrames are counted on the tap in demo/wasm/pglite.go —
+// one in the onNotification subscription, one over the raw bytes execProtocol
+// returned — so both are measured at the PGlite boundary and neither depends on
+// the routing decision they are used to check.
+type notifyProbe struct {
+	Ran          bool   `json:"ran"`
+	RouteInline  bool   `json:"routeInlineNotifications"`
+	HasCallback  bool   `json:"pgliteExposesOnNotification"`
+	Delivered    bool   `json:"deliveredToPgx"`
+	CallbackHits int    `json:"onNotificationCallbacks"`
+	InlineFrames int    `json:"inlineNotificationFrames"`
+	Verdict      string `json:"verdict"`
+	Err          string `json:"error"`
+}
+
+// workflowRow is one row of DBOS's workflow list, with the steps the property
+// graph says it has. The two halves come from different reads, which is why
+// StepsError exists: the traversal can fail while the row itself is fine.
+type workflowRow struct {
+	ID         string    `json:"workflowUuid"`
+	Status     string    `json:"status"`
+	Name       string    `json:"name"`
+	Queue      string    `json:"queueName"`
+	Steps      []stepRow `json:"steps"`
+	StepsError string    `json:"stepsError"`
+}
+
+type stepRow struct {
+	FunctionID   int32  `json:"functionId"`
+	FunctionName string `json:"functionName"`
+	Error        string `json:"error"`
+}
+
+// shimError is the F20 result: what a backend error looked like by the time it
+// had crossed the transport.
+type shimError struct {
+	Statement string `json:"statement"`
+	Message   string `json:"message"`
+	// SQLState is populated only when the error decoded to a *pgconn.PgError,
+	// which is the thing F20 actually asserts.
+	SQLState  string `json:"sqlState"`
+	IsPgError bool   `json:"isPgError"`
+}
+
+// stepNames lists a row's steps in the order the graph returned them.
+func (w workflowRow) stepNames() []string {
+	out := make([]string, 0, len(w.Steps))
+	for _, s := range w.Steps {
+		out = append(out, s.FunctionName)
+	}
+	return out
+}
+
+// find returns the row for id.
+func (p pageState) find(id string) (workflowRow, bool) {
+	for _, w := range p.Workflows {
+		if w.ID == id {
+			return w, true
+		}
+	}
+	return workflowRow{}, false
+}
+
+// ids is the set of workflows the page already knows about.
+//
+// Every scenario shares one origin and therefore one IndexedDB database, so the
+// list is cumulative across the suite. Taking the difference across a click is
+// what makes "the workflow this scenario started" a well-defined thing.
+func (p pageState) ids() map[string]bool {
+	out := make(map[string]bool, len(p.Workflows))
+	for _, w := range p.Workflows {
+		out[w.ID] = true
+	}
+	return out
+}
+
+// terminal reports whether a DBOS status can still change. It is used to fail a
+// wait early with the status the workflow actually reached, rather than after a
+// three-minute timeout that says only that SUCCESS never arrived.
+//
+// The list is DBOS Go v1.0.0's enum minus the statuses that are still in
+// flight; RETRIES_EXCEEDED is deliberately absent, because that is a DBOS
+// Python/TypeScript status (see features/durable_execution.feature).
+func terminal(status string) bool {
+	switch status {
+	case "SUCCESS", "ERROR", "CANCELLED", "MAX_RECOVERY_ATTEMPTS_EXCEEDED":
+		return true
+	default:
+		return false
+	}
+}
+
+// --- driving the tab --------------------------------------------------------
+
+// load performs a navigation and returns when the browser has committed it,
+// which is deliberately not when the page has finished loading.
+//
+// chromedp.Navigate and chromedp.Reload wait for the load event, and this suite
+// does not, because the load event turned out to be the wrong thing to wait for
+// twice over. It is not a readiness signal — when the last byte lands the
+// runtime has still to instantiate the wasm module, run initdb, the dbos
+// migrations, the property graph and the notification probe — and, measured
+// against this preview, it is not even a reliable signal that a load happened:
+// one run of this suite spent its entire eight-minute budget inside
+// chromedp.Navigate against a page that a raw navigation reaches in a second.
+//
+// So the navigation is issued raw and everything that means "the runtime is up"
+// is [suite.settle]'s, asked of the page rather than polled at it.
+//
+// The commit gets the boot budget rather than a round-trip one. It is tempting
+// to give it less on the grounds that the page has not run yet and so cannot be
+// what is slow — and that is wrong. Committing a navigation means opening the
+// connection and reading the first bytes of a 25 MB asset set, on a browser
+// that is competing for CPU with everything else on the machine; it has been
+// measured at 21 and 48 seconds on a quiet box and it exceeded two minutes on a
+// loaded one. A bound that assumes otherwise turns a busy machine into a red
+// suite, which is the failure mode a browser test must not have.
+func (s *suite) load(what string, action chromedp.Action) error {
+	ctx, cancel := context.WithTimeout(s.tab, bootTimeout)
+	defer cancel()
+	if err := chromedp.Run(ctx, action); err != nil {
+		return fmt.Errorf("%s %s: %w", what, s.target, err)
+	}
+	return nil
+}
+
+// navigateAction issues Page.navigate and returns once the navigation is
+// committed.
+func (s *suite) navigateAction() chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		_, _, _, _, err := page.Navigate(s.target).Do(ctx)
+		return err
+	})
+}
+
+// reloadAction issues Page.reload and returns once the reload is committed.
+func reloadAction() chromedp.Action {
+	return chromedp.ActionFunc(func(ctx context.Context) error {
+		return page.Reload().Do(ctx)
+	})
+}
+
+// open navigates and returns once the runtime says it is up.
+func (s *suite) open() error {
+	if err := s.load("navigate to", s.navigateAction()); err != nil {
+		return err
+	}
+	return s.settle()
+}
+
+// reopen reloads the tab and returns once the runtime says it is up again.
+func (s *suite) reopen() error {
+	if err := s.load("reload", reloadAction()); err != nil {
+		return err
+	}
+	return s.settle()
+}
+
+// settle waits for boot.js to publish its contract and for the Go runtime to
+// report itself ready. It is what both a navigation and a reload wait on.
+//
+// It is one evaluated promise rather than a poll loop, for the reason [readyJS]
+// gives: a poll loop cannot observe a single-threaded page that is busy.
+func (s *suite) settle() error {
+	// The page gets the boot budget and Go gets a little more, so that a page
+	// which is answering is always allowed to answer. If Go's bound were the
+	// tighter of the two, the diagnosis the page assembled would be discarded
+	// at the moment it became available.
+	const slack = 30 * time.Second
+	ctx, cancel := context.WithTimeout(s.tab, bootTimeout+slack)
+	defer cancel()
+
+	// The navigation was issued raw, so the document the promise is evaluated
+	// into may still be the outgoing one for a moment; Chrome answers that with
+	// a destroyed execution context rather than a result. It is a startup race,
+	// not a verdict, so it is retried — against the same context, so retrying
+	// cannot extend the budget.
+	readyJS := fmt.Sprintf(readyJSFormat, bootTimeout.Milliseconds())
+	var raw string
+	var err error
+	for {
+		err = chromedp.Run(ctx, chromedp.Evaluate(readyJS, &raw, awaitPromise))
+		if err == nil || ctx.Err() != nil {
+			break
+		}
+		if err := s.pause(); err != nil {
+			return err
+		}
+	}
+	if err != nil {
+		return fmt.Errorf("waited %s for the runtime at %s to report itself ready, and the page "+
+			"never answered at all: %w%s", bootTimeout, s.target, err, s.lastKnown())
+	}
+
+	var snap readySnapshot
+	if err := json.Unmarshal([]byte(raw), &snap); err != nil {
+		return fmt.Errorf("decode the readiness snapshot: %w (it held %s)", err, clip(raw))
+	}
+
+	if snap.TimedOut {
+		return fmt.Errorf("waited %s for the runtime at %s to report itself ready; it got as far as "+
+			"stage %q. %s", bootTimeout, s.target, snap.State.Stage, describe(snap.State))
+	}
+	if !snap.State.Ready {
+		return fmt.Errorf("the page reached stage %q instead of ready: %s",
+			snap.State.Stage, describe(snap.State))
+	}
+	if snap.Contract != pageContract {
+		return fmt.Errorf(
+			"the deployed page declares window.agentiq.contract=%d and this suite is written "+
+				"against %d; an element id was removed or renamed (demo/web/boot.js) and the "+
+				"selectors here have to be retargeted before any assertion below means anything",
+			snap.Contract, pageContract)
+	}
+	return nil
+}
+
+// lastKnown is a best-effort account of the page for a boot that never
+// finished, formatted to be appended to an error.
+//
+// It is best-effort because the reason [suite.settle] failed may well be the
+// reason this cannot be read either — a main thread that never came back
+// answers nothing, including this. An empty result is therefore reported as
+// such rather than swallowed, since "the page said nothing at all" is itself
+// the most informative thing there is to say about that case.
+func (s *suite) lastKnown() string {
+	st, err := s.readState()
+	if err != nil {
+		return fmt.Sprintf("\nthe page could not be read afterwards either: %v", err)
+	}
+	return "\n" + describe(st)
+}
+
+// readState reads the page's account of itself.
+func (s *suite) readState() (pageState, error) {
+	ctx, cancel := context.WithTimeout(s.tab, evalTimeout)
+	defer cancel()
+
+	var raw string
+	if err := chromedp.Run(ctx, chromedp.Evaluate(stateJS, &raw)); err != nil {
+		return pageState{}, fmt.Errorf("read %s: %w", selState, err)
+	}
+	if strings.TrimSpace(raw) == "" {
+		return pageState{}, fmt.Errorf("%s is missing from the page; it is the whole of the "+
+			"browser test's contract (SPEC.md §14.4)", selState)
+	}
+
+	var st pageState
+	if err := json.Unmarshal([]byte(raw), &st); err != nil {
+		return pageState{}, fmt.Errorf("decode %s: %w (it held %s)", selState, err, clip(raw))
+	}
+	return st, nil
+}
+
+// awaitState polls until want is satisfied, and on failure says what the page
+// was doing instead.
+//
+// It polls rather than using chromedp.Poll because the predicate is written in
+// Go over the decoded state: a JavaScript expression could answer "is it
+// SUCCESS yet" but not report the step error, the stage and the tail of the
+// runtime's log when the answer stays no.
+func (s *suite) awaitState(timeout time.Duration, what string, want func(pageState) bool) (pageState, error) {
+	deadline := time.Now().Add(timeout)
+	var (
+		last    pageState
+		lastErr error
+		seen    bool
+	)
+	for {
+		st, err := s.readState()
+		if err == nil {
+			last, lastErr, seen = st, nil, true
+			if want(st) {
+				return st, nil
+			}
+		} else {
+			lastErr = err
+		}
+
+		if time.Now().After(deadline) {
+			break
+		}
+		if err := s.pause(); err != nil {
+			return last, fmt.Errorf("waiting for %s: %w", what, err)
+		}
+	}
+
+	if !seen {
+		return last, fmt.Errorf("waited %s for %s; the page never published a readable state: %v",
+			timeout, what, lastErr)
+	}
+	return last, fmt.Errorf("waited %s for %s; %s", timeout, what, describe(last))
+}
+
+// pause waits one polling interval, or gives up if the tab has gone.
+func (s *suite) pause() error {
+	select {
+	case <-time.After(pollInterval):
+		return nil
+	case <-s.tab.Done():
+		return fmt.Errorf("the tab closed: %w", s.tab.Err())
+	}
+}
+
+// click presses one of the page's buttons.
+//
+// The buttons are ga-button custom elements and the click handlers are
+// registered on the host (demo/wasm/ui.go, onClick), so a real mouse click on
+// the element is what the page is built to receive — and it is also what a
+// person does, which is the thing the scenario claims works.
+func (s *suite) click(sel string) error {
+	ctx, cancel := context.WithTimeout(s.tab, evalTimeout)
+	defer cancel()
+	if err := chromedp.Run(ctx, chromedp.Click(sel, chromedp.ByQuery, chromedp.NodeVisible)); err != nil {
+		return fmt.Errorf("click %s: %w", sel, err)
+	}
+	return nil
+}
+
+// --- reporting --------------------------------------------------------------
+
+// logTail is how much of the runtime's own log a failure carries. The page
+// keeps 200 lines; the last few are the ones that say why.
+const logTail = 15
+
+// describe renders the state as the paragraph a failure needs: what stage the
+// runtime reached, what it thinks of its workflows, and the tail of its log,
+// which is where DBOS and the transport say what went wrong.
+func describe(st pageState) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "the page reports stage=%q ready=%t dbosLaunched=%t recoveredAtStartup=%d",
+		st.Stage, st.Ready, st.Runtime.Launched, st.Runtime.Recovered)
+	if st.Error != "" {
+		fmt.Fprintf(&b, " error=%q", st.Error)
+	}
+	if st.Runtime.PGliteVersion != "" {
+		fmt.Fprintf(&b, " pglite=%s server=%s", st.Runtime.PGliteVersion, st.Runtime.ServerVersion)
+	}
+
+	if len(st.Workflows) == 0 {
+		b.WriteString("\nworkflows: none")
+	} else {
+		b.WriteString("\nworkflows:")
+		for _, w := range st.Workflows {
+			fmt.Fprintf(&b, "\n  %s %s queue=%q steps=%v", w.ID, w.Status, w.Queue, w.stepNames())
+			if w.StepsError != "" {
+				fmt.Fprintf(&b, " stepsError=%q", w.StepsError)
+			}
+		}
+	}
+	if st.ShimError != nil {
+		fmt.Fprintf(&b, "\nshimError: isPgError=%t sqlState=%q %s",
+			st.ShimError.IsPgError, st.ShimError.SQLState, st.ShimError.Message)
+	}
+
+	if n := len(st.Log); n > 0 {
+		from := max(n-logTail, 0)
+		fmt.Fprintf(&b, "\nthe last %d of the runtime's %d log lines:\n  %s",
+			n-from, n, strings.Join(st.Log[from:], "\n  "))
+	}
+	return b.String()
+}
+
+// clip shortens a blob for a failure message.
+func clip(s string) string {
+	const limit = 300
+	s = strings.TrimSpace(s)
+	if len(s) <= limit {
+		return fmt.Sprintf("%q", s)
+	}
+	return fmt.Sprintf("%q… (%d bytes)", s[:limit], len(s))
+}
+
+// --- assertions -------------------------------------------------------------
+
+// assertions collects testify failures so that a step can return them.
+//
+// godog attributes a failure to a scenario and a step from the error the step
+// returns, and that error is what reaches the JUnit report CI reads. Testify
+// reports through a TestingT instead, so handing it godog's own *testing.T
+// fails the Go subtest while leaving the step — and therefore the scenario —
+// green: the report would show a passing scenario inside a failing test.
+//
+// This bridges the two. Only assert.* is used against it, never require.*:
+// require calls FailNow, which has nothing to stop here. A step that must stop
+// early returns an error of its own.
+type assertions struct{ msgs []string }
+
+func (a *assertions) Errorf(format string, args ...any) {
+	a.msgs = append(a.msgs, strings.TrimSpace(fmt.Sprintf(format, args...)))
+}
+
+func (a *assertions) err() error {
+	if len(a.msgs) == 0 {
+		return nil
+	}
+	return errors.New(strings.Join(a.msgs, "\n"))
+}

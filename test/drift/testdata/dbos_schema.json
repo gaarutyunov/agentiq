@@ -1,0 +1,431 @@
+{
+  "dbosVersion": "v1.0.0",
+  "tables": {
+    "application_versions": [
+      {
+        "name": "created_at",
+        "type": "bigint"
+      },
+      {
+        "name": "version_id",
+        "type": "text"
+      },
+      {
+        "name": "version_name",
+        "type": "text"
+      },
+      {
+        "name": "version_timestamp",
+        "type": "bigint"
+      }
+    ],
+    "dbos_migrations": [
+      {
+        "name": "version",
+        "type": "bigint"
+      }
+    ],
+    "event_dispatch_kv": [
+      {
+        "name": "key",
+        "type": "text"
+      },
+      {
+        "name": "service_name",
+        "type": "text"
+      },
+      {
+        "name": "update_seq",
+        "type": "numeric"
+      },
+      {
+        "name": "update_time",
+        "type": "numeric"
+      },
+      {
+        "name": "value",
+        "type": "text"
+      },
+      {
+        "name": "workflow_fn_name",
+        "type": "text"
+      }
+    ],
+    "notifications": [
+      {
+        "name": "consumed",
+        "type": "boolean"
+      },
+      {
+        "name": "created_at_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "destination_uuid",
+        "type": "text"
+      },
+      {
+        "name": "message",
+        "type": "text"
+      },
+      {
+        "name": "message_uuid",
+        "type": "text"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "topic",
+        "type": "text"
+      }
+    ],
+    "operation_outputs": [
+      {
+        "name": "child_workflow_id",
+        "type": "text"
+      },
+      {
+        "name": "completed_at_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "error",
+        "type": "text"
+      },
+      {
+        "name": "function_id",
+        "type": "integer"
+      },
+      {
+        "name": "function_name",
+        "type": "text"
+      },
+      {
+        "name": "output",
+        "type": "text"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "started_at_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "workflow_uuid",
+        "type": "text"
+      }
+    ],
+    "queues": [
+      {
+        "name": "concurrency",
+        "type": "integer"
+      },
+      {
+        "name": "created_at",
+        "type": "bigint"
+      },
+      {
+        "name": "name",
+        "type": "text"
+      },
+      {
+        "name": "partition_queue",
+        "type": "boolean"
+      },
+      {
+        "name": "polling_interval_sec",
+        "type": "double precision"
+      },
+      {
+        "name": "priority_enabled",
+        "type": "boolean"
+      },
+      {
+        "name": "queue_id",
+        "type": "text"
+      },
+      {
+        "name": "rate_limit_max",
+        "type": "integer"
+      },
+      {
+        "name": "rate_limit_period_sec",
+        "type": "double precision"
+      },
+      {
+        "name": "updated_at",
+        "type": "bigint"
+      },
+      {
+        "name": "worker_concurrency",
+        "type": "integer"
+      }
+    ],
+    "streams": [
+      {
+        "name": "function_id",
+        "type": "integer"
+      },
+      {
+        "name": "key",
+        "type": "text"
+      },
+      {
+        "name": "offset",
+        "type": "integer"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "value",
+        "type": "text"
+      },
+      {
+        "name": "workflow_uuid",
+        "type": "text"
+      }
+    ],
+    "workflow_events": [
+      {
+        "name": "key",
+        "type": "text"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "value",
+        "type": "text"
+      },
+      {
+        "name": "workflow_uuid",
+        "type": "text"
+      }
+    ],
+    "workflow_events_history": [
+      {
+        "name": "function_id",
+        "type": "integer"
+      },
+      {
+        "name": "key",
+        "type": "text"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "value",
+        "type": "text"
+      },
+      {
+        "name": "workflow_uuid",
+        "type": "text"
+      }
+    ],
+    "workflow_schedules": [
+      {
+        "name": "automatic_backfill",
+        "type": "boolean"
+      },
+      {
+        "name": "context",
+        "type": "text"
+      },
+      {
+        "name": "cron_timezone",
+        "type": "text"
+      },
+      {
+        "name": "last_fired_at",
+        "type": "text"
+      },
+      {
+        "name": "queue_name",
+        "type": "text"
+      },
+      {
+        "name": "schedule",
+        "type": "text"
+      },
+      {
+        "name": "schedule_id",
+        "type": "text"
+      },
+      {
+        "name": "schedule_name",
+        "type": "text"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "workflow_class_name",
+        "type": "text"
+      },
+      {
+        "name": "workflow_name",
+        "type": "text"
+      }
+    ],
+    "workflow_status": [
+      {
+        "name": "application_id",
+        "type": "text"
+      },
+      {
+        "name": "application_version",
+        "type": "text"
+      },
+      {
+        "name": "assumed_role",
+        "type": "text"
+      },
+      {
+        "name": "attributes",
+        "type": "jsonb"
+      },
+      {
+        "name": "authenticated_roles",
+        "type": "text"
+      },
+      {
+        "name": "authenticated_user",
+        "type": "text"
+      },
+      {
+        "name": "class_name",
+        "type": "character varying"
+      },
+      {
+        "name": "completed_at",
+        "type": "bigint"
+      },
+      {
+        "name": "config_name",
+        "type": "character varying"
+      },
+      {
+        "name": "created_at",
+        "type": "bigint"
+      },
+      {
+        "name": "debounce_deadline_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "deduplication_id",
+        "type": "text"
+      },
+      {
+        "name": "delay_until_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "error",
+        "type": "text"
+      },
+      {
+        "name": "executor_id",
+        "type": "text"
+      },
+      {
+        "name": "forked_from",
+        "type": "text"
+      },
+      {
+        "name": "inputs",
+        "type": "text"
+      },
+      {
+        "name": "is_debounced",
+        "type": "boolean"
+      },
+      {
+        "name": "name",
+        "type": "text"
+      },
+      {
+        "name": "output",
+        "type": "text"
+      },
+      {
+        "name": "owner_xid",
+        "type": "text"
+      },
+      {
+        "name": "parent_workflow_id",
+        "type": "text"
+      },
+      {
+        "name": "priority",
+        "type": "integer"
+      },
+      {
+        "name": "queue_name",
+        "type": "text"
+      },
+      {
+        "name": "queue_partition_key",
+        "type": "text"
+      },
+      {
+        "name": "rate_limited",
+        "type": "boolean"
+      },
+      {
+        "name": "recovery_attempts",
+        "type": "bigint"
+      },
+      {
+        "name": "request",
+        "type": "text"
+      },
+      {
+        "name": "schedule_name",
+        "type": "text"
+      },
+      {
+        "name": "serialization",
+        "type": "text"
+      },
+      {
+        "name": "started_at_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "status",
+        "type": "text"
+      },
+      {
+        "name": "updated_at",
+        "type": "bigint"
+      },
+      {
+        "name": "was_forked_from",
+        "type": "boolean"
+      },
+      {
+        "name": "workflow_deadline_epoch_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "workflow_timeout_ms",
+        "type": "bigint"
+      },
+      {
+        "name": "workflow_uuid",
+        "type": "text"
+      }
+    ]
+  }
+}

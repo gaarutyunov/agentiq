@@ -1,0 +1,50 @@
+# SPEC.md §13.2 — every pull request's demo is published under
+# https://<user>.github.io/agentiq/pr-preview/pr-<n>/ and removed when the PR
+# closes. §20's M1 definition of done requires this preview to be live, and
+# test/browser (§14.4) has no other target: F20, F21 and F22 only execute
+# against a deployed page.
+name: PR preview
+
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, closed]
+
+permissions:
+  contents: write
+  pull-requests: write
+
+# §13.2. Unlike pages-deploy, cancelling here is correct: a superseded push to
+# the same PR publishes a tree nobody wants.
+concurrency:
+  group: preview-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25'
+        if: github.event.action != 'closed'
+
+      # Skipped on `closed`: that run only removes the preview directory, and
+      # building a WASM binary to delete a directory wastes four minutes.
+      - name: Build WASM demo
+        if: github.event.action != 'closed'
+        run: make demo
+
+      - name: WASM size gate
+        if: github.event.action != 'closed'
+        run: make wasm-size
+
+      - uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./demo/dist
+          preview-branch: gh-pages
+          umbrella-dir: pr-preview
+          # Deploys on opened/reopened/synchronize, removes on closed. This is
+          # why the workflow subscribes to `closed` at all.
+          action: auto

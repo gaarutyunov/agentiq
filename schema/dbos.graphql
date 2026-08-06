@@ -1,0 +1,149 @@
+# Read-only projection of the `dbos.*` schema (SPEC.md §7.3).
+#
+# DBOS owns these tables and migrates them with `dbos migrate`. Every type here
+# is `@readonly`, so gopgql emits no CREATE TABLE, no ALTER, no DROP and no
+# index for them — only the property-graph mapping and the read model.
+#
+# The directive vocabulary and the DateTime / JSON scalars are supplied by
+# gopgql's own prelude and must not be redeclared here: declaring them is a
+# duplicate-definition error. SPEC.md §7.1's preamble names an idealised
+# vocabulary (`@table`, `@vertex`, `@edge`); the vocabulary gopgql actually
+# implements is `@node`, `@key`, `@relationship`, and it is what this document
+# uses. The mapping is one-to-one:
+#
+#   @table(name:, schema:)  ->  @node(label:, table:, schema:)
+#   @vertex(key: [cols])    ->  @key(fields: [graphql field names])
+#   @edge(from:, to:, label:) -> @relationship(type:, direction:,
+#                                              table:, schema:,
+#                                              sourceKey:, destKey:)
+#
+# `@key(fields:)` takes GraphQL field names; `sourceKey:`/`destKey:` take
+# physical column names of the *edge* table.
+#
+# SPEC.md §7.1 also declares a `JSONB` scalar. gopgql's prelude has `JSON`
+# only, so a column that is physically `jsonb` is `JSON @column(type: "jsonb")`.
+# For a @readonly type the physical type is never emitted as DDL; it only tells
+# the compiler how to shape the value back.
+#
+# `Workflow.session` (SPEC.md §7.3's HAS_SESSION edge) is deliberately absent:
+# `Session` lives in `schema/agentiq.graphql`, which does not exist until M2.
+#
+# SPEC.md §7.3 also writes `parent` and `childWorkflow` as to-one fields.
+# gopgql refuses a non-list `@relationship` field ("@relationship fields must be
+# list types"), so both are `[Workflow!]!` here — a list that holds at most one
+# element. It has no cardinality directive to say otherwise.
+#
+# `HAS_STEP` (Workflow → Step) and `SPAWNED` (Step → Workflow) both map onto
+# `dbos.operation_outputs`. That is deliberate and gopgql ≥ v0.2.1 emits both as
+# distinct edge elements, keyed by relationship label rather than by physical
+# table. Do not delete one to make the DDL look tidier: `HAS_STEP` is the
+# traversal SPEC.md §16's M1 acceptance is written against, and `SPAWNED` is how
+# a workflow reaches the children it started.
+
+type Workflow
+  @node(label: "workflow", table: "workflow_status", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid"]) {
+  workflowUuid:     ID!       @column(name: "workflow_uuid")
+  status:           String!
+  name:             String!
+  queueName:        String    @column(name: "queue_name")
+  # SPEC.md §7.3 types these `DateTime!`. They are not timestamps.
+  # `dbos.workflow_status.created_at` and `updated_at` are BIGINT holding
+  # milliseconds since the Unix epoch (confirmed by introspection — see
+  # test/drift/testdata/dbos_schema.json, and DBOS's own
+  # `started_at_epoch_ms` / `completed_at_epoch_ms` / `workflow_timeout_ms`,
+  # which are named for it).
+  #
+  # Declaring them DateTime does not fail generation, it fails at *runtime*:
+  # gopgql's shaper rejects the row with "createdAt is DateTime, so it should
+  # have arrived as a timestamp, but it arrived as int64", which takes down
+  # SPEC.md §16's M1 acceptance query in both the server build and the browser
+  # build. `Int` is what the column is; a caller that wants a time.Time builds
+  # one from the epoch.
+  createdAt:        Int! @column(name: "created_at")
+  updatedAt:        Int! @column(name: "updated_at")
+  recoveryAttempts: Int       @column(name: "recovery_attempts")
+  # SPEC.md §7.3 types the payload columns `JSON`. They are not JSON.
+  # `inputs`, `output` and `error` are TEXT holding whatever DBOS's serializer
+  # produced — by default a base64-encoded gob blob, not a JSON document (the
+  # sibling `serialization` column records which encoding was used). Declaring
+  # them JSON fails at read time, not at generation time: gopgql's shaper
+  # rejects the row with `output is not a valid JSON document: invalid
+  # character 'I' looking for beginning of value`, which is the first byte of
+  # the base64.
+  #
+  # `attributes` really is `jsonb` and stays JSON.
+  #
+  # They are String here: an opaque payload whose encoding the `serialization`
+  # column names. A consumer that wants the value decodes it with the DBOS
+  # serializer, which is the only thing that can.
+  attributes:       JSON      @column(type: "jsonb")
+  inputs:           String
+  output:           String
+  error:            String
+
+  steps: [Step!]! @relationship(
+    type: "HAS_STEP", direction: OUT
+    table: "operation_outputs", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["workflow_uuid", "function_id"]
+  )
+
+  parent: [Workflow!]! @relationship(
+    type: "PARENT", direction: OUT
+    table: "workflow_status", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["parent_workflow_id"]
+  )
+
+  streams: [StreamValue!]! @relationship(
+    type: "EMITTED", direction: OUT
+    table: "streams", schema: "dbos"
+    sourceKey: ["workflow_uuid"], destKey: ["workflow_uuid", "key", "offset"]
+  )
+}
+
+type Step
+  @node(label: "step", table: "operation_outputs", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid", "functionId"]) {
+  workflowUuid: ID!    @column(name: "workflow_uuid")
+  functionId:   Int!   @column(name: "function_id")
+  functionName: String @column(name: "function_name")
+  # TEXT holding a serializer payload, not JSON. See the note on Workflow.
+  output:       String
+  error:        String
+
+  childWorkflow: [Workflow!]! @relationship(
+    type: "SPAWNED", direction: OUT
+    table: "operation_outputs", schema: "dbos"
+    sourceKey: ["workflow_uuid", "function_id"], destKey: ["child_workflow_id"]
+  )
+}
+
+type StreamValue
+  @node(label: "stream_value", table: "streams", schema: "dbos")
+  @readonly
+  @key(fields: ["workflowUuid", "key", "seq"]) {
+  workflowUuid: ID!     @column(name: "workflow_uuid")
+  key:          String!
+  seq:          Int!    @column(name: "offset") # `offset` is reserved; quoted
+  # TEXT holding a serializer payload, not JSON. See the note on Workflow.
+  value:        String
+  functionId:   Int     @column(name: "function_id")
+}
+
+type Mutation {
+  # SPEC.md §7.4. DBOS exposes enqueue, not direct start: every externally
+  # triggered run passes through a DBOS queue. `queue`'s GraphQL default is
+  # "agent"; an argument the operation does not pass is left out of the call
+  # entirely, so the function's own SQL DEFAULT applies (passing null sends
+  # NULL, which is a different thing).
+  startAgentRun(
+    agentDigest: String! @column(name: "agent_digest")
+    userId: String! @column(name: "user_id")
+    input: JSON! @column(name: "input")
+    queue: String = "agent" @column(name: "queue")
+    deduplicationId: String @column(name: "deduplication_id")
+    priority: Int @column(name: "priority")
+  ): String! @function(schema: "dbos", name: "enqueue_workflow")
+}

@@ -1,0 +1,4 @@
+/bin/
+
+# godog JUnit output (SPEC.md §14.3); written next to each suite.
+/test/*/reports/

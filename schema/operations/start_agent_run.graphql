@@ -1,0 +1,20 @@
+# SPEC.md §7.4. The only command surface: every externally triggered run is
+# enqueued through a DBOS queue. Compiles to a named-notation call on
+# `dbos.enqueue_workflow` — no hand-written resolver, no graph, no GRAPH_TABLE.
+mutation StartAgentRun(
+  $agentDigest: String!
+  $userId: String!
+  $input: JSON!
+  $queue: String
+  $deduplicationId: String
+  $priority: Int
+) {
+  startAgentRun(
+    agentDigest: $agentDigest
+    userId: $userId
+    input: $input
+    queue: $queue
+    deduplicationId: $deduplicationId
+    priority: $priority
+  )
+}

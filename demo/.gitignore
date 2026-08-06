@@ -1,0 +1,6 @@
+# `demo/dist/` is the assembled demo: the Go WASM binary, wasm_exec.js copied
+# out of GOROOT, and everything under demo/web/. It is what the `demo` make
+# target writes (SPEC.md §16) and what the Pages workflows publish
+# (SPEC.md §13.1, §13.2), so it is a build output here and a committed artifact
+# only on the `gh-pages` branch.
+dist/
