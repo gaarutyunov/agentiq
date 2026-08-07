@@ -45,12 +45,13 @@ ANALYZER_SOURCES := $(shell find analyzer -name '*.go' -not -path 'analyzer/test
 # makes growth visible rather than enforcing a target. Exceeding it is a
 # decision recorded in SPEC.md, not a silent regression.
 #
-# 56 MiB from M2, raised from 40 MiB, and §18.3 carries the argument. Short
-# version: M1 built to 33.9 MiB, M2 measures 44.98 MiB because the page runs
-# `workflow.AgentRun` itself and therefore links ADK and the OpenRouter client,
-# and the headroom is deliberate so that M3 and M4 report their growth instead
-# of tripping a gate they were always going to trip.
-WASM_MAX_BYTES := 58720256
+# 72 MiB from M2, raised from 40 MiB, and §18.3 carries the argument. Short
+# version: M1 built to 33.9 MiB; M2 measures 63.09 MiB because the page runs
+# `workflow.AgentRun` itself and signs in to OpenRouter itself, so ADK, the
+# OpenAI SDK and the generated client are all linked into the tab. The headroom
+# is deliberate so that M3 and M4 report their growth instead of tripping a gate
+# they were always going to trip.
+WASM_MAX_BYTES := 75497472
 
 verify: generate-check lint test-unit test-integration demo browser-test
 

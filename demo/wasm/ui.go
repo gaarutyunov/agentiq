@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall/js"
@@ -53,7 +54,24 @@ type pageState struct {
 	// runtime did not start, this means the runtime reported a database error
 	// correctly.
 	ShimError *shimError `json:"shimError,omitempty"`
-	Log       []string   `json:"log"`
+	// Chat is M2's turn: whether the tab is signed in to OpenRouter and how the
+	// last turn ended. It reaches the state element and not only the alert
+	// because that element is the page's contract with test/browser, and a fact
+	// rendered only as text is one a suite would have to scrape.
+	Chat chatState `json:"chat"`
+	Log  []string  `json:"log"`
+}
+
+// chatState is what the page says about the M2 chat panel.
+type chatState struct {
+	Status string `json:"status"`
+	Tone   string `json:"tone"`
+	// SignedIn is D19's observable: the page holds an OpenRouter key issued to
+	// the user, in sessionStorage, or it holds nothing.
+	SignedIn bool `json:"signedIn"`
+	// Events is how many events the transcript was last read back with — from
+	// the property graph, not from what the page sent.
+	Events int `json:"events"`
 }
 
 // shimError is what an error looked like by the time it had crossed the shim.
@@ -370,6 +388,73 @@ func (u *ui) enable(id string, on bool) {
 	} else {
 		el.Call("setAttribute", "disabled", "")
 	}
+}
+
+// inputValue reads a plain `<input>`'s value. `enable` above works on it too:
+// `disabled` is an attribute on a form control exactly as it is on a
+// `ga-button`.
+func (u *ui) inputValue(id string) string {
+	el := u.el(id)
+	if el.IsNull() {
+		return ""
+	}
+	v := el.Get("value")
+	if v.IsUndefined() || v.IsNull() {
+		return ""
+	}
+	return v.String()
+}
+
+func (u *ui) setInputValue(id, value string) {
+	el := u.el(id)
+	if el.IsNull() {
+		return
+	}
+	el.Set("value", value)
+}
+
+// setChatStatus writes the chat panel's one-line state, and publishes it.
+//
+// It reaches `#agentiq-state` as well as the alert, because that element is the
+// page's contract with `test/browser` — a fact only rendered as text is one the
+// suite would have to scrape.
+func (u *ui) setChatStatus(text, tone string) { u.setChat(text, tone, u.state.Chat.SignedIn) }
+
+// setChat writes the panel's whole state at once.
+func (u *ui) setChat(text, tone string, signedIn bool) {
+	el := u.el("chat-status")
+	if !el.IsNull() {
+		el.Call("setAttribute", "tone", tone)
+		el.Set("textContent", text)
+	}
+	u.mu.Lock()
+	u.state.Chat.Status = text
+	u.state.Chat.Tone = tone
+	u.state.Chat.SignedIn = signedIn
+	u.mu.Unlock()
+	u.flush()
+}
+
+// renderEvents draws the transcript read back from the property graph.
+func (u *ui) renderEvents(events []eventRow) {
+	table := u.el("events")
+	if table.IsNull() {
+		return
+	}
+	table.Set("innerHTML", "")
+	for _, e := range events {
+		row := u.doc.Call("createElement", "div")
+		row.Call("setAttribute", "slot", "row")
+		row.Call("appendChild", u.cell(strconv.FormatInt(e.Sequence, 10)))
+		row.Call("appendChild", u.cell(e.Author))
+		row.Call("appendChild", u.cell(e.Parts))
+		table.Call("appendChild", row)
+	}
+
+	u.mu.Lock()
+	u.state.Chat.Events = len(events)
+	u.mu.Unlock()
+	u.flush()
 }
 
 // flush publishes the state. It is the last thing every mutator does, because a

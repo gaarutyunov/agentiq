@@ -132,7 +132,7 @@ jobs:
       - name: WASM build
         run: make demo
 
-      # §18.3, gated at 56 MiB from M2 (40 MiB through M1 — the raise and its
+      # §18.3, gated at 72 MiB from M2 (40 MiB through M1 — the raise and its
       # argument are in §18.3, and the threshold itself lives in the Makefile so
       # it is not re-derived in YAML). §18.1's `stat -c%s` is GNU-only, so the
       # recipe uses portable `wc -c` and reports the measured size.

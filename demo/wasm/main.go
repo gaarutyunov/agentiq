@@ -122,9 +122,14 @@ const (
 	// callers, which is the kind of number that silently becomes wrong.
 	logicalConns = 8
 
-	// demoDigest stands in for a real agent digest. M1 has no agent
-	// (SPEC.md §20 M1); the workflow only asserts the digest is non-empty.
-	demoDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	// demoDigest is the reserved digest that runs the durability shape rather
+	// than an agent — see workflow.DurabilityProbeDigest. It is what the "Start
+	// a workflow" button enqueues, and it is deliberately not the chat's agent:
+	// that button demonstrates the reload-and-resume property, which wants two
+	// checkpoints with a gap between them and neither a model nor a key.
+	//
+	// The chat panel enqueues the fixture agent instead (chat.go).
+	demoDigest = workflow.DurabilityProbeDigest
 
 	// refreshInterval is how often the property-graph traversal re-runs. It is
 	// slower than the workflow's own 2s checkpoint delay so a person can watch
@@ -142,6 +147,15 @@ type app struct {
 	client  *client.Client
 	backend *backend
 	facts   runtimeFacts
+
+	// dataSource is what a chat turn's appends transact on (D2). It is built at
+	// boot rather than at sign-in because `dbos.NewDataSource` creates its own
+	// `transaction_completion` table, which is migration work.
+	dataSource *dbos.DataSource
+
+	// chat is M2's turn: PKCE sign-in, one message, and the transcript read
+	// back from the graph. See chat.go.
+	chat *chat
 }
 
 func main() {
@@ -248,6 +262,17 @@ func (a *app) boot(ctx context.Context) error {
 	u.stage("probing notification delivery")
 	u.setProbe(runNotifyProbe(ctx, pool, be, routeInline))
 
+	// The DataSource has to exist before the workflow is registered with it,
+	// and before Launch, because a recovered run transacts on it.
+	ds, err := dataSourceFor(dbosCtx, pool)
+	if err != nil {
+		return err
+	}
+	a.dataSource = ds
+
+	// Registered signed-out. The agent deps arrive with the key, at sign-in,
+	// and until then the page runs the durability-only shape — which is what
+	// keeps the reload and invalid-SQL scenarios working with no key at all.
 	u.stage("registering workflows")
 	if err := workflow.Register(dbosCtx, workflow.Deps{}); err != nil {
 		return fmt.Errorf("register workflows: %w", err)
@@ -271,6 +296,8 @@ func (a *app) boot(ctx context.Context) error {
 	}
 
 	go a.watchdog(ctx, mux)
+
+	a.wireChat(ctx)
 
 	u.onClick("start", func() { a.startRun(ctx) })
 	u.onClick("bad-sql", func() { a.runInvalidSQL(ctx) })
