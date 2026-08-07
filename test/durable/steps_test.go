@@ -163,7 +163,11 @@ func (s *suite) theGraphIsApplied() error {
 
 // --- When ------------------------------------------------------------------
 
-func (s *suite) aRunIsEnqueued() error { return s.enqueue("sha256:m1-placeholder-digest") }
+// The reserved digest, so the run takes the two-step shape these rows are
+// about: they kill a worker between checkpoints, which is a property of where
+// the checkpoints are and not of what runs between them. See
+// workflow.DurabilityProbeDigest.
+func (s *suite) aRunIsEnqueued() error { return s.enqueue(workflow.DurabilityProbeDigest) }
 
 // aRunWithNoDigestIsEnqueued drives failure-matrix row F4. workflow.resolveAgent
 // rejects an empty digest, which is the only permanent step error M1's

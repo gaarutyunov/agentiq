@@ -49,15 +49,29 @@ var ErrToolNotWrapped = errors.New("dbosadk: the tool is not wrapped by dbosadk.
 // # Why this is a plugin and not a lint rule
 //
 // The determinism analyzer (SPEC.md §17.1) walks the transitive call graph from
-// `RegisterWorkflow`, so it catches an ADK internal that reaches `time.Now`.
-// What it cannot catch is an agent *assembled* with an unwrapped model: which
-// `model.LLM` an `llmagent` holds is a value, not a call, and no static walk
-// from the workflow function can see it. The failure that produces is the
-// expensive kind — a generation that is re-executed and re-billed on every
-// replay, in a system that looks entirely healthy until its first recovery.
+// `RegisterWorkflow`, and it stops at the module boundary — `walker.inModule`
+// follows a call only into a package under AgentIQ's own import path. So it
+// covers `workflow`, `session` and this package, and it does **not** see inside
+// ADK. That is a deliberate limit rather than an oversight: a walk into every
+// dependency would report on code nobody here can change, and the module's own
+// code is where a violation can actually be fixed.
 //
-// So the analyzer covers the code and the plugin covers the wiring. Together
-// they are §9.1's determinism contract; neither is sufficient alone.
+// Which leaves two things outside its reach, and they are this plugin's:
+//
+//   - What ADK itself does between the step boundaries. The analyzer cannot
+//     read it, so the wrappers have to be the seam — everything ADK does that
+//     matters for replay is a model call or a tool call, and both go through
+//     `dbosadk`.
+//   - An agent *assembled* with an unwrapped model. Which `model.LLM` an
+//     `llmagent` holds is a value, not a call, so no static walk from the
+//     workflow function could see it even within the module. The failure that
+//     produces is the expensive kind: a generation re-executed and re-billed on
+//     every replay, in a system that looks entirely healthy until its first
+//     recovery.
+//
+// So the analyzer covers the module's code and the plugin covers the wiring and
+// the boundary. Together they are §9.1's determinism contract; neither is
+// sufficient alone.
 //
 // # It fails the run rather than repairing it
 //

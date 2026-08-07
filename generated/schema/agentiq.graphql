@@ -643,3 +643,69 @@ type SessionState
   value:     JSON!     @column(name: "value_json", type: "json")
   updatedAt: DateTime! @column(name: "updated_at_ts")
 }
+
+# ---------------------------------------------------------------------------
+# Agent
+# ---------------------------------------------------------------------------
+#
+# SPEC.md §7.1 does not declare these two types, and §20 M2 requires the rows
+# they hold: "Agent rows are **seeded directly** by a fixture migration. The OCI
+# pull lands in M3 and writes these same rows. Nothing built here is discarded"
+# (D24). So the table has to exist for M2 to have anything to seed, and it has
+# to be the shape M3 projects into rather than a shim M3 replaces.
+#
+# The shape is §6.3's. An agent is identified by the digest of its OCI image
+# index, and that digest transitively fixes everything about it — instruction,
+# model config, skills, tools, sub-agents — because each is a descriptor
+# carrying its own digest. So the digest is the key, the columns are the
+# resolved closure, and nothing about an agent is configurable at run time
+# (§10.2). M3's projection writes the same columns from the manifest it pulls;
+# `skills`, `tools` and `subAgents` are declared now, holding `[]`, so that the
+# projection adds rows rather than columns.
+
+"""
+One resolved agent closure, keyed by the digest of its OCI image index
+(SPEC.md §6.3). Seeded by a fixture migration in M2 and written by the epos
+projection from M3 (D24).
+"""
+type Agent
+  @node(label: "agent", table: "agent", schema: "agentiq")
+  @key(fields: ["digest"]) {
+  id:           ID!
+  digest:       String!   @column(name: "digest")
+  name:         String!
+  description:  String
+  model:        String!
+  instruction:  String!
+  skills:       JSON!     @column(name: "skills", type: "json")
+  tools:        JSON!     @column(name: "tools", type: "json")
+  subAgents:    JSON!     @column(name: "sub_agents", type: "json")
+  createdAt:    DateTime! @column(name: "created_at_ts")
+
+}
+
+"""
+SPEC.md §6.3's `agentiq.workflow_agent(workflow_uuid, agent_digest)`: the digest
+pinned at enqueue time, so a replay re-reads the agent the run started with and
+editing an agent cannot affect an execution already in flight.
+
+There is deliberately no graph edge between this and `Agent`, and it is not an
+omission. gopgql resolves an owned type's edge against its *surrogate* key: a
+`@relationship` naming `agent_digest` emits `REFERENCES agent (id)`, and
+Postgres rejects the graph outright — "no equality operator exists for SOURCE
+key comparison" — because one side is text and the other uuid. Expressing the
+edge would mean adding an `agent_id uuid` column beside the digest, and §6.3 is
+specific that what is pinned is the digest. A second identity for the same
+thing is how the two get to disagree.
+
+So the join is `agentDigest` against `Agent.digest`, made by the reader. §6.2
+asks for no edge here; the seven it does ask for are all present.
+"""
+type WorkflowAgent
+  @node(label: "workflow_agent", table: "workflow_agent", schema: "agentiq")
+  @key(fields: ["workflowUuid"]) {
+  id:           ID!
+  workflowUuid: String!   @column(name: "workflow_uuid")
+  agentDigest:  String!   @column(name: "agent_digest")
+  pinnedAt:     DateTime! @column(name: "pinned_at_ts")
+}

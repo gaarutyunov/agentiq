@@ -174,6 +174,89 @@ func gopgqlAsTime(v any) (time.Time, bool) {
 // gopgqlValue has already rejected.
 func gopgqlAsAny(v any) (any, bool) { return v, true }
 
+// AgentInput is the input of Agent.
+type AgentInput struct {
+	Digest string
+}
+
+// AgentAgent is one Agent of the Agent result.
+type AgentAgent struct {
+	Digest      string
+	Name        string
+	Description *string
+	Model       string
+	Instruction string
+	Skills      any
+	Tools       any
+	SubAgents   any
+}
+
+const agentSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v0_c5::text AS v0_c5, v0_c6::text AS v0_c6, v0_c7::text AS v0_c7\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS agent)\n  WHERE v0.digest = $1\n  COLUMNS (v0.id AS v0_k, v0.digest AS v0_c0, v0.name AS v0_c1, v0.description AS v0_c2, v0.model AS v0_c3, v0.instruction AS v0_c4, v0.skills AS v0_c5, v0.tools AS v0_c6, v0.sub_agents AS v0_c7)\n)\nORDER BY v0_k"
+
+var agentColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2", "v0_c3", "v0_c4", "v0_c5", "v0_c6", "v0_c7"}
+
+var agentProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "agent", TypeName: "Agent", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "digest", Property: "digest", Column: "v0_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "name", Property: "name", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "description", Property: "description", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "model", Property: "model", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "instruction", Property: "instruction", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "skills", Property: "skills", Column: "v0_c5", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "tools", Property: "tools", Column: "v0_c6", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "subAgents", Property: "sub_agents", Column: "v0_c7", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}}}}
+
+// Agent runs the Agent operation through the handle the caller supplies.
+func (c *Client) Agent(ctx context.Context, h exec.Handle, in AgentInput) ([]AgentAgent, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        agentSQL,
+		Args:       []any{in.Digest},
+		Columns:    agentColumns,
+		Projection: agentProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleAgentAgent("agent", res["agent"])
+}
+
+func assembleAgentAgent(path string, v any) ([]AgentAgent, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]AgentAgent, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o AgentAgent
+		var err error
+		if o.Digest, err = gopgqlValue(at+".digest", row["digest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Name, err = gopgqlValue(at+".name", row["name"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Description, err = gopgqlPointer(at+".description", row["description"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Model, err = gopgqlValue(at+".model", row["model"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Instruction, err = gopgqlValue(at+".instruction", row["instruction"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Skills, err = gopgqlValue(at+".skills", row["skills"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.Tools, err = gopgqlValue(at+".tools", row["tools"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.SubAgents, err = gopgqlValue(at+".subAgents", row["subAgents"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
 // AppendEventInput is the input of AppendEvent.
 type AppendEventInput struct {
 	SessionId      string
@@ -1755,6 +1838,69 @@ func (c *Client) StartAgentRun(ctx context.Context, h exec.Handle, in StartAgent
 		return zero, err
 	}
 	return gopgqlValue("StartAgentRun", v, gopgqlAsString)
+}
+
+// WorkflowAgentInput is the input of WorkflowAgent.
+type WorkflowAgentInput struct {
+	WorkflowUuid string
+}
+
+// WorkflowAgentWorkflowAgent is one WorkflowAgent of the WorkflowAgent result.
+type WorkflowAgentWorkflowAgent struct {
+	WorkflowUuid string
+	AgentDigest  string
+	PinnedAt     time.Time
+}
+
+const workflowAgentSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS workflow_agent)\n  WHERE v0.workflow_uuid = $1\n  COLUMNS (v0.id AS v0_k, v0.workflow_uuid AS v0_c0, v0.agent_digest AS v0_c1, v0.pinned_at_ts AS v0_c2)\n)\nORDER BY v0_k"
+
+var workflowAgentColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2"}
+
+var workflowAgentProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "workflow_agent", TypeName: "WorkflowAgent", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "pinnedAt", Property: "pinned_at_ts", Column: "v0_c2", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}
+
+// WorkflowAgent runs the WorkflowAgent operation through the handle the caller supplies.
+func (c *Client) WorkflowAgent(ctx context.Context, h exec.Handle, in WorkflowAgentInput) ([]WorkflowAgentWorkflowAgent, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        workflowAgentSQL,
+		Args:       []any{in.WorkflowUuid},
+		Columns:    workflowAgentColumns,
+		Projection: workflowAgentProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleWorkflowAgentWorkflowAgent("workflow_agent", res["workflow_agent"])
+}
+
+func assembleWorkflowAgentWorkflowAgent(path string, v any) ([]WorkflowAgentWorkflowAgent, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]WorkflowAgentWorkflowAgent, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o WorkflowAgentWorkflowAgent
+		var err error
+		if o.WorkflowUuid, err = gopgqlValue(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AgentDigest, err = gopgqlValue(at+".agentDigest", row["agentDigest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.PinnedAt, err = gopgqlValue(at+".pinnedAt", row["pinnedAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
 }
 
 // WorkflowWithStepsInput is the input of WorkflowWithSteps.

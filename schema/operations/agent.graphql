@@ -1,0 +1,36 @@
+# SPEC.md §6.3. One agent closure by digest — what `workflow.AgentRun` resolves
+# before it builds the ADK agent.
+#
+# By digest and not by name, because the digest *is* the identity: it
+# transitively fixes the instruction, model config, skills, tools and sub-agents,
+# and editing an agent produces a new digest rather than changing this one. That
+# is what lets a workflow suspended for days resume against the agent it started
+# with.
+query Agent($digest: String!) {
+  agent(digest: $digest) {
+    digest
+    name
+    description
+    model
+    instruction
+    skills
+    tools
+    subAgents
+  }
+}
+
+# The digest pinned to one workflow at enqueue time (SPEC.md §6.3).
+#
+# It carries the digest and not the agent, because the `PINNED_BY` edge runs
+# `agent ──▶ workflow_agent`: gopgql puts the join column in the table the
+# relationship names, and `agent_digest` is a column of `workflow_agent`. A
+# caller that wants the closure asks `Agent` above with the digest this
+# returns — which is the same two-step a replay performs anyway, since the
+# digest is the thing that is pinned and the closure is what it resolves to.
+query WorkflowAgent($workflowUuid: String!) {
+  workflow_agent(workflowUuid: $workflowUuid) {
+    workflowUuid
+    agentDigest
+    pinnedAt
+  }
+}
