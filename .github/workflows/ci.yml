@@ -11,35 +11,43 @@
 # are real gates.
 name: CI
 
-on: [push, pull_request]
-
-# Without this, every commit on a PR branch runs this workflow **twice** — once
-# for `push` and once for `pull_request` — and the two race each other on the
-# same runner pool. That is not a tidiness problem: the duplicates contend for
-# headless Chrome, and one of them loses.
+# A commit on a PR branch must produce exactly **one** run of this workflow.
+#
+# `on: [push, pull_request]` fires twice for the same commit — once per event —
+# and the two race each other on the same runner pool. That is not a tidiness
+# problem: the duplicates contend for headless Chrome and one of them loses.
 #
 #   browser_test.go:57: Received unexpected error: websocket url timeout reached
 #   Messages: start headless Chrome
 #   --- FAIL: TestBrowserRuntime (20.07s)
 #
 # Commit 57e0aad has two `verify` runs three seconds apart, one SUCCESS and one
-# FAILURE, differing only in which won the race. Green CI is this repository's
-# only merge gate, so a gate that reds on infrastructure contention is a gate
-# nobody can read.
+# FAILURE, differing only in which won the race.
 #
-# `github.ref` alone does NOT fix it, which is the trap here. On a `push` it is
-# `refs/heads/issue-3`; on the matching `pull_request` it is
-# `refs/pull/10/merge`. Two different strings, so the two events land in two
-# different groups and both still run — the duplicate is only deduplicated
-# *within* each event type, which is not the problem.
+# The first fix was the concurrency group below, which let both events fire and
+# cancelled the loser. It stopped the contention and introduced a worse problem:
+# **a cancelled run stays in the pull request's check rollup forever**, so every
+# PR read `UNSTABLE` while genuinely green, and the board digest reported this
+# one as `CI-RED FAIL(1)`. A gate that always shows red is exactly as unreadable
+# as one that always shows green — it destroys the ability to notice a real
+# failure, which is the only thing the concurrency fix was for.
 #
-# `github.head_ref` is set only on `pull_request` and holds the source branch
-# (`issue-3`); `github.ref_name` on a `push` is that same branch. So the
-# fallback collapses both events onto one group per branch, which is what is
-# actually wanted, and leaves `main` pushes grouped under `main`.
+# So the events are narrowed instead: a push to a PR branch is not a trigger at
+# all, and the `pull_request` event is the single run. Pushes to `main` still
+# build, because nothing else covers a direct commit or a merge.
 #
-# SPEC.md §18.2 — milestones do not add or remove CI jobs. This adds no job and
-# no step; it constrains how many copies of the existing job may run at once.
+# The concurrency group stays, and still earns its place — it is what cancels a
+# superseded run when commits land on the same branch in quick succession. It is
+# simply no longer what deduplicates the two event types, which is a job it
+# could only ever do by leaving the cancelled artifact behind.
+#
+# SPEC.md §18.2 — milestones do not add or remove CI jobs. This changes *when*
+# the existing job fires. It adds no job and no step.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
 concurrency:
   group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: true
