@@ -13,6 +13,37 @@ name: CI
 
 on: [push, pull_request]
 
+# Without this, every commit on a PR branch runs this workflow **twice** — once
+# for `push` and once for `pull_request` — and the two race each other on the
+# same runner pool. That is not a tidiness problem: the duplicates contend for
+# headless Chrome, and one of them loses.
+#
+#   browser_test.go:57: Received unexpected error: websocket url timeout reached
+#   Messages: start headless Chrome
+#   --- FAIL: TestBrowserRuntime (20.07s)
+#
+# Commit 57e0aad has two `verify` runs three seconds apart, one SUCCESS and one
+# FAILURE, differing only in which won the race. Green CI is this repository's
+# only merge gate, so a gate that reds on infrastructure contention is a gate
+# nobody can read.
+#
+# `github.ref` alone does NOT fix it, which is the trap here. On a `push` it is
+# `refs/heads/issue-3`; on the matching `pull_request` it is
+# `refs/pull/10/merge`. Two different strings, so the two events land in two
+# different groups and both still run — the duplicate is only deduplicated
+# *within* each event type, which is not the problem.
+#
+# `github.head_ref` is set only on `pull_request` and holds the source branch
+# (`issue-3`); `github.ref_name` on a `push` is that same branch. So the
+# fallback collapses both events onto one group per branch, which is what is
+# actually wanted, and leaves `main` pushes grouped under `main`.
+#
+# SPEC.md §18.2 — milestones do not add or remove CI jobs. This adds no job and
+# no step; it constrains how many copies of the existing job may run at once.
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
+
 # §18.1 has no `permissions:` block, so it would inherit the repository
 # default. Nothing in this job writes to the repository — deploy.yml and
 # pr-preview.yml are the workflows that do — so it is read-only here.
