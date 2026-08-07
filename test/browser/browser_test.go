@@ -65,6 +65,19 @@ func TestBrowserRuntime(t *testing.T) {
 	allocOpts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
 	allocOpts = append(allocOpts, chromedp.CombinedOutput(&chromeOutput))
 
+	// Pay the machine's one-time first-launch cost before the handshake that is
+	// timed, and pin chromedp to the binary that was warmed. See warmup_test.go:
+	// the first launch on a cold runner takes about twenty-three seconds and
+	// every launch after it about two hundred milliseconds, while chromedp gives
+	// the DevTools websocket URL twenty seconds — which is the whole of this
+	// suite's flake.
+	if browserPath := findBrowser(); browserPath != "" {
+		warmBrowser(t, browserPath)
+		allocOpts = append(allocOpts, chromedp.ExecPath(browserPath))
+	} else {
+		warmBrowser(t, "")
+	}
+
 	// One browser for the suite. Each scenario gets its own tab, because the
 	// reload scenario must not disturb the others and IndexedDB is per-origin,
 	// not per-tab.
