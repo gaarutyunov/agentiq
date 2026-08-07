@@ -211,6 +211,13 @@ type Mutation {
   # repeatedly with the same id; returning the existing row is what makes that a
   # no-op instead of a duplicate-key error, and what lets a replayed workflow
   # find the session its first attempt made.
+  #
+  # It returns the ADK session id, not the surrogate uuid: that is the id
+  # `CreateResponse.Session.ID()` carries and the only one a caller can ask for
+  # the session back by. `adkId` may be empty, in which case the function
+  # allocates one — `sessiontestsuite` calls Create with no session id and
+  # requires one to come back, and allocating it in Go would be a uuid drawn in
+  # workflow code.
   createSession(
     adkId: String! @column(name: "p_adk_id")
     appName: String! @column(name: "p_app_name")
@@ -218,7 +225,7 @@ type Mutation {
     agentDigest: String! @column(name: "p_agent_digest")
     workflowUuid: String @column(name: "p_workflow_uuid")
     state: JSON! @column(name: "p_state")
-  ): ID! @function(schema: "agentiq", name: "create_session")
+  ): String! @function(schema: "agentiq", name: "create_session")
 
   # Returns the number of session rows removed: 1, or 0 when there was nothing
   # to delete. Deleting an absent session is a success — ADK's Delete has no

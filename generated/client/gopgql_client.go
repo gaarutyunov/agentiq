@@ -936,6 +936,21 @@ type SessionSessionEventsActions struct {
 	TransferToAgent      *string
 	Escalate             *bool
 	RequestedAuthConfigs *any
+	StateDeltas          []SessionSessionEventsActionsStateDeltas
+	ArtifactDeltas       []SessionSessionEventsActionsArtifactDeltas
+}
+
+// SessionSessionEventsActionsStateDeltas is one StateDelta of the Session result.
+type SessionSessionEventsActionsStateDeltas struct {
+	Scope string
+	Key   string
+	Value any
+}
+
+// SessionSessionEventsActionsArtifactDeltas is one ArtifactDelta of the Session result.
+type SessionSessionEventsActionsArtifactDeltas struct {
+	Filename string
+	Version  int64
 }
 
 // SessionSessionState is one SessionState of the Session result.
@@ -946,11 +961,11 @@ type SessionSessionState struct {
 	UpdatedAt time.Time
 }
 
-const sessionSQL = "SELECT q0.v0_k, q0.v0_c0, q0.v0_c1, q0.v0_c2, q0.v0_c3, q0.v0_c4, q0.v0_c5, q0.v0_c6, q0.v0_c7, q1.v2_k, q1.v2_c0, q1.v2_c1, q1.v2_c2, q1.v2_c3, q1.v2_c4, q1.v2_c5, q1.v2_c6, q1.v2_c7, q1.v2_c8, q1.v2_c9, q1.v2_c10, q1.v2_c11, q1.v2_c12, q1.v2_c13, q1.v2_c14::text AS v2_c14, q1.v2_c15::text AS v2_c15, q1.v2_c16::text AS v2_c16, q1.v2_c17::text AS v2_c17, q1.v2_c18::text AS v2_c18, q1.v2_c19::text AS v2_c19, q1.v2_c20::text AS v2_c20, q1.v2_c21, q1.v2_c22, q2.v4_k, q2.v4_c0, q2.v4_c1, q2.v4_c2, q2.v4_c3, q2.v4_c4, q2.v4_c5, q2.v4_c6::text AS v4_c6, q2.v4_c7, q2.v4_c8, q2.v4_c9::text AS v4_c9, q2.v4_c10, q2.v4_c11, q2.v4_c12, q2.v4_c13, q2.v4_c14, q2.v4_c15, q2.v4_c16, q2.v4_c17, q2.v4_c18, q2.v4_c19, q2.v4_c20, q2.v4_c21, q2.v4_c22, q2.v4_c23::text AS v4_c23, q2.v4_c24, q2.v4_c25::text AS v4_c25, q2.v4_c26::text AS v4_c26, q2.v4_c27::text AS v4_c27, q3.v6_k, q3.v6_c0, q3.v6_c1, q3.v6_c2, q3.v6_c3::text AS v6_c3, q4.v8_k, q4.v8_c0, q4.v8_c1, q4.v8_c2::text AS v8_c2, q4.v8_c3\nFROM GRAPH_TABLE (agentiq_graph\n    MATCH (v0 IS session)\n    WHERE v0.app_name = $1 AND v0.user_id = $2 AND v0.adk_id = $3\n    COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n  ) AS q0\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v1 IS session) -[e0 IS \"HAS_EVENT\"]-> (v2 IS event)\n    COLUMNS (v1.id AS v1_j, v2.id AS v2_k, v2.id AS v2_c0, v2.adk_id AS v2_c1, v2.sequence AS v2_c2, v2.invocation_id AS v2_c3, v2.author AS v2_c4, v2.branch AS v2_c5, v2.timestamp AS v2_c6, v2.turn_complete AS v2_c7, v2.interrupted AS v2_c8, v2.isolation_scope AS v2_c9, v2.error_code AS v2_c10, v2.error_message AS v2_c11, v2.content_role AS v2_c12, v2.long_running_tool_ids AS v2_c13, v2.requested_input AS v2_c14, v2.routes AS v2_c15, v2.node_info AS v2_c16, v2.grounding_metadata AS v2_c17, v2.usage_metadata AS v2_c18, v2.citation_metadata AS v2_c19, v2.custom_metadata AS v2_c20, v2.step_function_id AS v2_c21, v2.workflow_uuid AS v2_c22)\n  ) AS q1 ON q1.v1_j = q0.v0_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v3 IS event) -[e1 IS \"HAS_PART\"]-> (v4 IS part)\n    COLUMNS (v3.id AS v3_j, v4.id AS v4_k, v4.part_index AS v4_c0, v4.text AS v4_c1, v4.thought AS v4_c2, v4.thought_signature_b64 AS v4_c3, v4.function_call_id AS v4_c4, v4.function_call_name AS v4_c5, v4.function_call_args AS v4_c6, v4.function_response_id AS v4_c7, v4.function_response_name AS v4_c8, v4.function_response_response AS v4_c9, v4.inline_data_mime_type AS v4_c10, v4.inline_data_bytes_b64 AS v4_c11, v4.inline_data_display_name AS v4_c12, v4.file_data_mime_type AS v4_c13, v4.file_data_uri AS v4_c14, v4.file_data_display_name AS v4_c15, v4.executable_code_language AS v4_c16, v4.executable_code_code AS v4_c17, v4.code_execution_outcome AS v4_c18, v4.code_execution_output AS v4_c19, v4.video_metadata_start_offset AS v4_c20, v4.video_metadata_end_offset AS v4_c21, v4.video_metadata_fps AS v4_c22, v4.audio_transcription AS v4_c23, v4.media_resolution AS v4_c24, v4.tool_call AS v4_c25, v4.tool_response AS v4_c26, v4.part_metadata AS v4_c27)\n  ) AS q2 ON q2.v3_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v5 IS event) -[e2 IS \"HAS_ACTIONS\"]-> (v6 IS actions)\n    COLUMNS (v5.id AS v5_j, v6.id AS v6_k, v6.skip_summarization AS v6_c0, v6.transfer_to_agent AS v6_c1, v6.escalate AS v6_c2, v6.requested_auth_configs AS v6_c3)\n  ) AS q3 ON q3.v5_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v7 IS session) -[e3 IS \"HAS_STATE\"]-> (v8 IS session_state)\n    COLUMNS (v7.id AS v7_j, v8.id AS v8_k, v8.scope AS v8_c0, v8.\"key\" AS v8_c1, v8.value_json AS v8_c2, v8.updated_at_ts AS v8_c3)\n  ) AS q4 ON q4.v7_j = q0.v0_k\nORDER BY q0.v0_k, q1.v2_k, q2.v4_k, q3.v6_k, q4.v8_k"
+const sessionSQL = "SELECT q0.v0_k, q0.v0_c0, q0.v0_c1, q0.v0_c2, q0.v0_c3, q0.v0_c4, q0.v0_c5, q0.v0_c6, q0.v0_c7, q1.v2_k, q1.v2_c0, q1.v2_c1, q1.v2_c2, q1.v2_c3, q1.v2_c4, q1.v2_c5, q1.v2_c6, q1.v2_c7, q1.v2_c8, q1.v2_c9, q1.v2_c10, q1.v2_c11, q1.v2_c12, q1.v2_c13, q1.v2_c14::text AS v2_c14, q1.v2_c15::text AS v2_c15, q1.v2_c16::text AS v2_c16, q1.v2_c17::text AS v2_c17, q1.v2_c18::text AS v2_c18, q1.v2_c19::text AS v2_c19, q1.v2_c20::text AS v2_c20, q1.v2_c21, q1.v2_c22, q2.v4_k, q2.v4_c0, q2.v4_c1, q2.v4_c2, q2.v4_c3, q2.v4_c4, q2.v4_c5, q2.v4_c6::text AS v4_c6, q2.v4_c7, q2.v4_c8, q2.v4_c9::text AS v4_c9, q2.v4_c10, q2.v4_c11, q2.v4_c12, q2.v4_c13, q2.v4_c14, q2.v4_c15, q2.v4_c16, q2.v4_c17, q2.v4_c18, q2.v4_c19, q2.v4_c20, q2.v4_c21, q2.v4_c22, q2.v4_c23::text AS v4_c23, q2.v4_c24, q2.v4_c25::text AS v4_c25, q2.v4_c26::text AS v4_c26, q2.v4_c27::text AS v4_c27, q3.v6_k, q3.v6_c0, q3.v6_c1, q3.v6_c2, q3.v6_c3::text AS v6_c3, q4.v8_k, q4.v8_c0, q4.v8_c1, q4.v8_c2::text AS v8_c2, q5.v10_k, q5.v10_c0, q5.v10_c1, q6.v12_k, q6.v12_c0, q6.v12_c1, q6.v12_c2::text AS v12_c2, q6.v12_c3\nFROM GRAPH_TABLE (agentiq_graph\n    MATCH (v0 IS session)\n    WHERE v0.app_name = $1 AND v0.user_id = $2 AND v0.adk_id = $3\n    COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n  ) AS q0\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v1 IS session) -[e0 IS \"HAS_EVENT\"]-> (v2 IS event)\n    COLUMNS (v1.id AS v1_j, v2.id AS v2_k, v2.id AS v2_c0, v2.adk_id AS v2_c1, v2.sequence AS v2_c2, v2.invocation_id AS v2_c3, v2.author AS v2_c4, v2.branch AS v2_c5, v2.timestamp AS v2_c6, v2.turn_complete AS v2_c7, v2.interrupted AS v2_c8, v2.isolation_scope AS v2_c9, v2.error_code AS v2_c10, v2.error_message AS v2_c11, v2.content_role AS v2_c12, v2.long_running_tool_ids AS v2_c13, v2.requested_input AS v2_c14, v2.routes AS v2_c15, v2.node_info AS v2_c16, v2.grounding_metadata AS v2_c17, v2.usage_metadata AS v2_c18, v2.citation_metadata AS v2_c19, v2.custom_metadata AS v2_c20, v2.step_function_id AS v2_c21, v2.workflow_uuid AS v2_c22)\n  ) AS q1 ON q1.v1_j = q0.v0_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v3 IS event) -[e1 IS \"HAS_PART\"]-> (v4 IS part)\n    COLUMNS (v3.id AS v3_j, v4.id AS v4_k, v4.part_index AS v4_c0, v4.text AS v4_c1, v4.thought AS v4_c2, v4.thought_signature_b64 AS v4_c3, v4.function_call_id AS v4_c4, v4.function_call_name AS v4_c5, v4.function_call_args AS v4_c6, v4.function_response_id AS v4_c7, v4.function_response_name AS v4_c8, v4.function_response_response AS v4_c9, v4.inline_data_mime_type AS v4_c10, v4.inline_data_bytes_b64 AS v4_c11, v4.inline_data_display_name AS v4_c12, v4.file_data_mime_type AS v4_c13, v4.file_data_uri AS v4_c14, v4.file_data_display_name AS v4_c15, v4.executable_code_language AS v4_c16, v4.executable_code_code AS v4_c17, v4.code_execution_outcome AS v4_c18, v4.code_execution_output AS v4_c19, v4.video_metadata_start_offset AS v4_c20, v4.video_metadata_end_offset AS v4_c21, v4.video_metadata_fps AS v4_c22, v4.audio_transcription AS v4_c23, v4.media_resolution AS v4_c24, v4.tool_call AS v4_c25, v4.tool_response AS v4_c26, v4.part_metadata AS v4_c27)\n  ) AS q2 ON q2.v3_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v5 IS event) -[e2 IS \"HAS_ACTIONS\"]-> (v6 IS actions)\n    COLUMNS (v5.id AS v5_j, v6.id AS v6_k, v6.skip_summarization AS v6_c0, v6.transfer_to_agent AS v6_c1, v6.escalate AS v6_c2, v6.requested_auth_configs AS v6_c3)\n  ) AS q3 ON q3.v5_j = q1.v2_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v7 IS actions) -[e3 IS \"SETS\"]-> (v8 IS state_delta)\n    COLUMNS (v7.id AS v7_j, v8.id AS v8_k, v8.scope AS v8_c0, v8.\"key\" AS v8_c1, v8.value_json AS v8_c2)\n  ) AS q4 ON q4.v7_j = q3.v6_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v9 IS actions) -[e4 IS \"PRODUCES\"]-> (v10 IS artifact_delta)\n    COLUMNS (v9.id AS v9_j, v10.id AS v10_k, v10.filename AS v10_c0, v10.version AS v10_c1)\n  ) AS q5 ON q5.v9_j = q3.v6_k\nLEFT JOIN GRAPH_TABLE (agentiq_graph\n    MATCH (v11 IS session) -[e5 IS \"HAS_STATE\"]-> (v12 IS session_state)\n    COLUMNS (v11.id AS v11_j, v12.id AS v12_k, v12.scope AS v12_c0, v12.\"key\" AS v12_c1, v12.value_json AS v12_c2, v12.updated_at_ts AS v12_c3)\n  ) AS q6 ON q6.v11_j = q0.v0_k\nORDER BY q0.v0_k, q1.v2_k, q2.v4_k, q3.v6_k, q4.v8_k, q5.v10_k, q6.v12_k"
 
-var sessionColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2", "v0_c3", "v0_c4", "v0_c5", "v0_c6", "v0_c7", "v2_k", "v2_c0", "v2_c1", "v2_c2", "v2_c3", "v2_c4", "v2_c5", "v2_c6", "v2_c7", "v2_c8", "v2_c9", "v2_c10", "v2_c11", "v2_c12", "v2_c13", "v2_c14", "v2_c15", "v2_c16", "v2_c17", "v2_c18", "v2_c19", "v2_c20", "v2_c21", "v2_c22", "v4_k", "v4_c0", "v4_c1", "v4_c2", "v4_c3", "v4_c4", "v4_c5", "v4_c6", "v4_c7", "v4_c8", "v4_c9", "v4_c10", "v4_c11", "v4_c12", "v4_c13", "v4_c14", "v4_c15", "v4_c16", "v4_c17", "v4_c18", "v4_c19", "v4_c20", "v4_c21", "v4_c22", "v4_c23", "v4_c24", "v4_c25", "v4_c26", "v4_c27", "v6_k", "v6_c0", "v6_c1", "v6_c2", "v6_c3", "v8_k", "v8_c0", "v8_c1", "v8_c2", "v8_c3"}
+var sessionColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2", "v0_c3", "v0_c4", "v0_c5", "v0_c6", "v0_c7", "v2_k", "v2_c0", "v2_c1", "v2_c2", "v2_c3", "v2_c4", "v2_c5", "v2_c6", "v2_c7", "v2_c8", "v2_c9", "v2_c10", "v2_c11", "v2_c12", "v2_c13", "v2_c14", "v2_c15", "v2_c16", "v2_c17", "v2_c18", "v2_c19", "v2_c20", "v2_c21", "v2_c22", "v4_k", "v4_c0", "v4_c1", "v4_c2", "v4_c3", "v4_c4", "v4_c5", "v4_c6", "v4_c7", "v4_c8", "v4_c9", "v4_c10", "v4_c11", "v4_c12", "v4_c13", "v4_c14", "v4_c15", "v4_c16", "v4_c17", "v4_c18", "v4_c19", "v4_c20", "v4_c21", "v4_c22", "v4_c23", "v4_c24", "v4_c25", "v4_c26", "v4_c27", "v6_k", "v6_c0", "v6_c1", "v6_c2", "v6_c3", "v8_k", "v8_c0", "v8_c1", "v8_c2", "v10_k", "v10_c0", "v10_c1", "v12_k", "v12_c0", "v12_c1", "v12_c2", "v12_c3"}
 
-var sessionProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "session", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "events", TypeName: "Event", Alias: "v2", KeyColumns: []string{"v2_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v2_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v2_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "sequence", Property: "sequence", Column: "v2_c2", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "invocationId", Property: "invocation_id", Column: "v2_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "author", Property: "author", Column: "v2_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "branch", Property: "branch", Column: "v2_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "timestamp", Property: "timestamp", Column: "v2_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "turnComplete", Property: "turn_complete", Column: "v2_c7", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "interrupted", Property: "interrupted", Column: "v2_c8", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "isolationScope", Property: "isolation_scope", Column: "v2_c9", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorCode", Property: "error_code", Column: "v2_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorMessage", Property: "error_message", Column: "v2_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "contentRole", Property: "content_role", Column: "v2_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "longRunningToolIds", Property: "long_running_tool_ids", Column: "v2_c13", GraphQLType: "String", ColumnType: "", List: true, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "requestedInput", Property: "requested_input", Column: "v2_c14", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "routes", Property: "routes", Column: "v2_c15", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "nodeInfo", Property: "node_info", Column: "v2_c16", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "groundingMetadata", Property: "grounding_metadata", Column: "v2_c17", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "usageMetadata", Property: "usage_metadata", Column: "v2_c18", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "citationMetadata", Property: "citation_metadata", Column: "v2_c19", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "customMetadata", Property: "custom_metadata", Column: "v2_c20", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "stepFunctionId", Property: "step_function_id", Column: "v2_c21", GraphQLType: "Int", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarInt}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v2_c22", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "parts", TypeName: "Part", Alias: "v4", KeyColumns: []string{"v4_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "partIndex", Property: "part_index", Column: "v4_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "text", Property: "text", Column: "v4_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "thought", Property: "thought", Column: "v4_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "thoughtSignature", Property: "thought_signature_b64", Column: "v4_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallId", Property: "function_call_id", Column: "v4_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallName", Property: "function_call_name", Column: "v4_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallArgs", Property: "function_call_args", Column: "v4_c6", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "functionResponseId", Property: "function_response_id", Column: "v4_c7", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseName", Property: "function_response_name", Column: "v4_c8", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseResponse", Property: "function_response_response", Column: "v4_c9", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "inlineDataMimeType", Property: "inline_data_mime_type", Column: "v4_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataBytes", Property: "inline_data_bytes_b64", Column: "v4_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataDisplayName", Property: "inline_data_display_name", Column: "v4_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataMimeType", Property: "file_data_mime_type", Column: "v4_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataUri", Property: "file_data_uri", Column: "v4_c14", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataDisplayName", Property: "file_data_display_name", Column: "v4_c15", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeLanguage", Property: "executable_code_language", Column: "v4_c16", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeCode", Property: "executable_code_code", Column: "v4_c17", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutcome", Property: "code_execution_outcome", Column: "v4_c18", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutput", Property: "code_execution_output", Column: "v4_c19", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataStartOffset", Property: "video_metadata_start_offset", Column: "v4_c20", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataEndOffset", Property: "video_metadata_end_offset", Column: "v4_c21", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataFps", Property: "video_metadata_fps", Column: "v4_c22", GraphQLType: "Float", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarFloat}, {ResponseKey: "audioTranscription", Property: "audio_transcription", Column: "v4_c23", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "mediaResolution", Property: "media_resolution", Column: "v4_c24", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "toolCall", Property: "tool_call", Column: "v4_c25", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "toolResponse", Property: "tool_response", Column: "v4_c26", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "partMetadata", Property: "part_metadata", Column: "v4_c27", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "actions", TypeName: "Actions", Alias: "v6", KeyColumns: []string{"v6_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "skipSummarization", Property: "skip_summarization", Column: "v6_c0", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "transferToAgent", Property: "transfer_to_agent", Column: "v6_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "escalate", Property: "escalate", Column: "v6_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "requestedAuthConfigs", Property: "requested_auth_configs", Column: "v6_c3", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}}}, &compiler.Selection{ResponseKey: "state", TypeName: "SessionState", Alias: "v8", KeyColumns: []string{"v8_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v8_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v8_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v8_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "updatedAt", Property: "updated_at_ts", Column: "v8_c3", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}}}
+var sessionProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "session", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "events", TypeName: "Event", Alias: "v2", KeyColumns: []string{"v2_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v2_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v2_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "sequence", Property: "sequence", Column: "v2_c2", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "invocationId", Property: "invocation_id", Column: "v2_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "author", Property: "author", Column: "v2_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "branch", Property: "branch", Column: "v2_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "timestamp", Property: "timestamp", Column: "v2_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "turnComplete", Property: "turn_complete", Column: "v2_c7", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "interrupted", Property: "interrupted", Column: "v2_c8", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarBoolean}, {ResponseKey: "isolationScope", Property: "isolation_scope", Column: "v2_c9", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorCode", Property: "error_code", Column: "v2_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "errorMessage", Property: "error_message", Column: "v2_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "contentRole", Property: "content_role", Column: "v2_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "longRunningToolIds", Property: "long_running_tool_ids", Column: "v2_c13", GraphQLType: "String", ColumnType: "", List: true, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "requestedInput", Property: "requested_input", Column: "v2_c14", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "routes", Property: "routes", Column: "v2_c15", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "nodeInfo", Property: "node_info", Column: "v2_c16", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "groundingMetadata", Property: "grounding_metadata", Column: "v2_c17", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "usageMetadata", Property: "usage_metadata", Column: "v2_c18", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "citationMetadata", Property: "citation_metadata", Column: "v2_c19", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "customMetadata", Property: "custom_metadata", Column: "v2_c20", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "stepFunctionId", Property: "step_function_id", Column: "v2_c21", GraphQLType: "Int", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarInt}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v2_c22", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "parts", TypeName: "Part", Alias: "v4", KeyColumns: []string{"v4_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "partIndex", Property: "part_index", Column: "v4_c0", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}, {ResponseKey: "text", Property: "text", Column: "v4_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "thought", Property: "thought", Column: "v4_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "thoughtSignature", Property: "thought_signature_b64", Column: "v4_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallId", Property: "function_call_id", Column: "v4_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallName", Property: "function_call_name", Column: "v4_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionCallArgs", Property: "function_call_args", Column: "v4_c6", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "functionResponseId", Property: "function_response_id", Column: "v4_c7", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseName", Property: "function_response_name", Column: "v4_c8", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "functionResponseResponse", Property: "function_response_response", Column: "v4_c9", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "inlineDataMimeType", Property: "inline_data_mime_type", Column: "v4_c10", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataBytes", Property: "inline_data_bytes_b64", Column: "v4_c11", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "inlineDataDisplayName", Property: "inline_data_display_name", Column: "v4_c12", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataMimeType", Property: "file_data_mime_type", Column: "v4_c13", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataUri", Property: "file_data_uri", Column: "v4_c14", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "fileDataDisplayName", Property: "file_data_display_name", Column: "v4_c15", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeLanguage", Property: "executable_code_language", Column: "v4_c16", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "executableCodeCode", Property: "executable_code_code", Column: "v4_c17", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutcome", Property: "code_execution_outcome", Column: "v4_c18", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "codeExecutionOutput", Property: "code_execution_output", Column: "v4_c19", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataStartOffset", Property: "video_metadata_start_offset", Column: "v4_c20", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataEndOffset", Property: "video_metadata_end_offset", Column: "v4_c21", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "videoMetadataFps", Property: "video_metadata_fps", Column: "v4_c22", GraphQLType: "Float", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarFloat}, {ResponseKey: "audioTranscription", Property: "audio_transcription", Column: "v4_c23", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "mediaResolution", Property: "media_resolution", Column: "v4_c24", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "toolCall", Property: "tool_call", Column: "v4_c25", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "toolResponse", Property: "tool_response", Column: "v4_c26", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}, {ResponseKey: "partMetadata", Property: "part_metadata", Column: "v4_c27", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "actions", TypeName: "Actions", Alias: "v6", KeyColumns: []string{"v6_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "skipSummarization", Property: "skip_summarization", Column: "v6_c0", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "transferToAgent", Property: "transfer_to_agent", Column: "v6_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "escalate", Property: "escalate", Column: "v6_c2", GraphQLType: "Boolean", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarBoolean}, {ResponseKey: "requestedAuthConfigs", Property: "requested_auth_configs", Column: "v6_c3", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: false, Scalar: compiler.ScalarJSON}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "stateDeltas", TypeName: "StateDelta", Alias: "v8", KeyColumns: []string{"v8_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v8_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v8_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v8_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}}}, &compiler.Selection{ResponseKey: "artifactDeltas", TypeName: "ArtifactDelta", Alias: "v10", KeyColumns: []string{"v10_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "filename", Property: "filename", Column: "v10_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "version", Property: "version", Column: "v10_c1", GraphQLType: "Int", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarInt}}}}}}}, &compiler.Selection{ResponseKey: "state", TypeName: "SessionState", Alias: "v12", KeyColumns: []string{"v12_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v12_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v12_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v12_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "updatedAt", Property: "updated_at_ts", Column: "v12_c3", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}}}
 
 // Session runs the Session operation through the handle the caller supplies.
 func (c *Client) Session(ctx context.Context, h exec.Handle, in SessionInput) ([]SessionSession, error) {
@@ -1250,6 +1265,71 @@ func assembleSessionSessionEventsActions(path string, v any) ([]SessionSessionEv
 		if o.RequestedAuthConfigs, err = gopgqlPointer(at+".requestedAuthConfigs", row["requestedAuthConfigs"], gopgqlAsAny); err != nil {
 			return nil, err
 		}
+		if o.StateDeltas, err = assembleSessionSessionEventsActionsStateDeltas(at+".stateDeltas", row["stateDeltas"]); err != nil {
+			return nil, err
+		}
+		if o.ArtifactDeltas, err = assembleSessionSessionEventsActionsArtifactDeltas(at+".artifactDeltas", row["artifactDeltas"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionEventsActionsStateDeltas(path string, v any) ([]SessionSessionEventsActionsStateDeltas, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionEventsActionsStateDeltas, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionEventsActionsStateDeltas
+		var err error
+		if o.Scope, err = gopgqlValue(at+".scope", row["scope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Key, err = gopgqlValue(at+".key", row["key"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Value, err = gopgqlValue(at+".value", row["value"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSessionSessionEventsActionsArtifactDeltas(path string, v any) ([]SessionSessionEventsActionsArtifactDeltas, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionSessionEventsActionsArtifactDeltas, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionSessionEventsActionsArtifactDeltas
+		var err error
+		if o.Filename, err = gopgqlValue(at+".filename", row["filename"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Version, err = gopgqlValue(at+".version", row["version"], gopgqlAsInt64); err != nil {
+			return nil, err
+		}
 		out = append(out, o)
 	}
 	return out, nil
@@ -1282,6 +1362,91 @@ func assembleSessionSessionState(path string, v any) ([]SessionSessionState, err
 			return nil, err
 		}
 		if o.UpdatedAt, err = gopgqlValue(at+".updatedAt", row["updatedAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// SessionRefInput is the input of SessionRef.
+type SessionRefInput struct {
+	AppName string
+	UserId  string
+	AdkId   string
+}
+
+// SessionRefSession is one Session of the SessionRef result.
+type SessionRefSession struct {
+	Id           string
+	AdkId        string
+	AppName      string
+	UserId       string
+	WorkflowUuid *string
+	AgentDigest  string
+	CreatedAt    time.Time
+	LastUpdateAt time.Time
+}
+
+const sessionRefSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v0_c5, v0_c6, v0_c7\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS session)\n  WHERE v0.app_name = $1 AND v0.user_id = $2 AND v0.adk_id = $3\n  COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n)\nORDER BY v0_k"
+
+var sessionRefColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2", "v0_c3", "v0_c4", "v0_c5", "v0_c6", "v0_c7"}
+
+var sessionRefProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "session", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}
+
+// SessionRef runs the SessionRef operation through the handle the caller supplies.
+func (c *Client) SessionRef(ctx context.Context, h exec.Handle, in SessionRefInput) ([]SessionRefSession, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        sessionRefSQL,
+		Args:       []any{in.AppName, in.UserId, in.AdkId},
+		Columns:    sessionRefColumns,
+		Projection: sessionRefProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleSessionRefSession("session", res["session"])
+}
+
+func assembleSessionRefSession(path string, v any) ([]SessionRefSession, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionRefSession, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionRefSession
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AppName, err = gopgqlValue(at+".appName", row["appName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.UserId, err = gopgqlValue(at+".userId", row["userId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AgentDigest, err = gopgqlValue(at+".agentDigest", row["agentDigest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.LastUpdateAt, err = gopgqlValue(at+".lastUpdateAt", row["lastUpdateAt"], gopgqlAsTime); err != nil {
 			return nil, err
 		}
 		out = append(out, o)
@@ -1366,6 +1531,194 @@ func assembleSessionsSession(path string, v any) ([]SessionsSession, error) {
 			return nil, err
 		}
 		if o.LastUpdateAt, err = gopgqlValue(at+".lastUpdateAt", row["lastUpdateAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// SessionsByAppInput is the input of SessionsByApp.
+type SessionsByAppInput struct {
+	AppName string
+}
+
+// SessionsByAppSession is one Session of the SessionsByApp result.
+type SessionsByAppSession struct {
+	Id           string
+	AdkId        string
+	AppName      string
+	UserId       string
+	WorkflowUuid *string
+	AgentDigest  string
+	CreatedAt    time.Time
+	LastUpdateAt time.Time
+}
+
+const sessionsByAppSQL = "SELECT v0_k, v0_c0, v0_c1, v0_c2, v0_c3, v0_c4, v0_c5, v0_c6, v0_c7\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS session)\n  WHERE v0.app_name = $1\n  COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.adk_id AS v0_c1, v0.app_name AS v0_c2, v0.user_id AS v0_c3, v0.workflow_uuid AS v0_c4, v0.agent_digest AS v0_c5, v0.created_at_ts AS v0_c6, v0.last_update_at AS v0_c7)\n)\nORDER BY v0_k"
+
+var sessionsByAppColumns = []string{"v0_k", "v0_c0", "v0_c1", "v0_c2", "v0_c3", "v0_c4", "v0_c5", "v0_c6", "v0_c7"}
+
+var sessionsByAppProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "sessions", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "adkId", Property: "adk_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "appName", Property: "app_name", Column: "v0_c2", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c3", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "workflowUuid", Property: "workflow_uuid", Column: "v0_c4", GraphQLType: "String", ColumnType: "", List: false, NonNull: false, Scalar: compiler.ScalarString}, {ResponseKey: "agentDigest", Property: "agent_digest", Column: "v0_c5", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "createdAt", Property: "created_at_ts", Column: "v0_c6", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}, {ResponseKey: "lastUpdateAt", Property: "last_update_at", Column: "v0_c7", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}
+
+// SessionsByApp runs the SessionsByApp operation through the handle the caller supplies.
+func (c *Client) SessionsByApp(ctx context.Context, h exec.Handle, in SessionsByAppInput) ([]SessionsByAppSession, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        sessionsByAppSQL,
+		Args:       []any{in.AppName},
+		Columns:    sessionsByAppColumns,
+		Projection: sessionsByAppProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleSessionsByAppSession("sessions", res["sessions"])
+}
+
+func assembleSessionsByAppSession(path string, v any) ([]SessionsByAppSession, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SessionsByAppSession, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SessionsByAppSession
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AdkId, err = gopgqlValue(at+".adkId", row["adkId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AppName, err = gopgqlValue(at+".appName", row["appName"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.UserId, err = gopgqlValue(at+".userId", row["userId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.WorkflowUuid, err = gopgqlPointer(at+".workflowUuid", row["workflowUuid"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.AgentDigest, err = gopgqlValue(at+".agentDigest", row["agentDigest"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.CreatedAt, err = gopgqlValue(at+".createdAt", row["createdAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		if o.LastUpdateAt, err = gopgqlValue(at+".lastUpdateAt", row["lastUpdateAt"], gopgqlAsTime); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+// SharedStateInput is the input of SharedState.
+type SharedStateInput struct {
+	AppName string
+}
+
+// SharedStateSession is one Session of the SharedState result.
+type SharedStateSession struct {
+	Id     string
+	UserId string
+	State  []SharedStateSessionState
+}
+
+// SharedStateSessionState is one SessionState of the SharedState result.
+type SharedStateSessionState struct {
+	Scope     string
+	Key       string
+	Value     any
+	UpdatedAt time.Time
+}
+
+const sharedStateSQL = "SELECT v0_k, v0_c0, v0_c1, v1_k, v1_c0, v1_c1, v1_c2::text AS v1_c2, v1_c3\nFROM GRAPH_TABLE (agentiq_graph\n  MATCH (v0 IS session) -[e0 IS \"HAS_STATE\"]-> (v1 IS session_state)\n  WHERE v0.app_name = $1\n  COLUMNS (v0.id AS v0_k, v0.id AS v0_c0, v0.user_id AS v0_c1, v1.id AS v1_k, v1.scope AS v1_c0, v1.\"key\" AS v1_c1, v1.value_json AS v1_c2, v1.updated_at_ts AS v1_c3)\n)\nORDER BY v0_k, v1_k"
+
+var sharedStateColumns = []string{"v0_k", "v0_c0", "v0_c1", "v1_k", "v1_c0", "v1_c1", "v1_c2", "v1_c3"}
+
+var sharedStateProjection = compiler.Projection{Root: &compiler.Selection{ResponseKey: "session", TypeName: "Session", Alias: "v0", KeyColumns: []string{"v0_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "id", Property: "id", Column: "v0_c0", GraphQLType: "ID", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarID}, {ResponseKey: "userId", Property: "user_id", Column: "v0_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}}, Children: []*compiler.Selection{&compiler.Selection{ResponseKey: "state", TypeName: "SessionState", Alias: "v1", KeyColumns: []string{"v1_k"}, Fields: []compiler.ProjectedField{{ResponseKey: "scope", Property: "scope", Column: "v1_c0", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "key", Property: "key", Column: "v1_c1", GraphQLType: "String", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarString}, {ResponseKey: "value", Property: "value_json", Column: "v1_c2", GraphQLType: "JSON", ColumnType: "json", List: false, NonNull: true, Scalar: compiler.ScalarJSON}, {ResponseKey: "updatedAt", Property: "updated_at_ts", Column: "v1_c3", GraphQLType: "DateTime", ColumnType: "", List: false, NonNull: true, Scalar: compiler.ScalarDateTime}}}}}}
+
+// SharedState runs the SharedState operation through the handle the caller supplies.
+func (c *Client) SharedState(ctx context.Context, h exec.Handle, in SharedStateInput) ([]SharedStateSession, error) {
+	res, err := exec.Query(ctx, h, &compiler.Compiled{
+		SQL:        sharedStateSQL,
+		Args:       []any{in.AppName},
+		Columns:    sharedStateColumns,
+		Projection: sharedStateProjection,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return assembleSharedStateSession("session", res["session"])
+}
+
+func assembleSharedStateSession(path string, v any) ([]SharedStateSession, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SharedStateSession, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SharedStateSession
+		var err error
+		if o.Id, err = gopgqlValue(at+".id", row["id"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.UserId, err = gopgqlValue(at+".userId", row["userId"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.State, err = assembleSharedStateSessionState(at+".state", row["state"]); err != nil {
+			return nil, err
+		}
+		out = append(out, o)
+	}
+	return out, nil
+}
+
+func assembleSharedStateSessionState(path string, v any) ([]SharedStateSessionState, error) {
+	if v == nil {
+		return nil, nil
+	}
+	rows, ok := v.([]any)
+	if !ok {
+		return nil, fmt.Errorf("gopgql: %s: expected a list, got %T", path, v)
+	}
+	out := make([]SharedStateSessionState, 0, len(rows))
+	for i, raw := range rows {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			return nil, fmt.Errorf("gopgql: %s[%d]: expected an object, got %T", path, i, raw)
+		}
+		at := fmt.Sprintf("%s[%d]", path, i)
+		var o SharedStateSessionState
+		var err error
+		if o.Scope, err = gopgqlValue(at+".scope", row["scope"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Key, err = gopgqlValue(at+".key", row["key"], gopgqlAsString); err != nil {
+			return nil, err
+		}
+		if o.Value, err = gopgqlValue(at+".value", row["value"], gopgqlAsAny); err != nil {
+			return nil, err
+		}
+		if o.UpdatedAt, err = gopgqlValue(at+".updatedAt", row["updatedAt"], gopgqlAsTime); err != nil {
 			return nil, err
 		}
 		out = append(out, o)

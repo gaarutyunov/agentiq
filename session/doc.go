@@ -22,10 +22,13 @@
 // run without a database, and the same corpus runs against Postgres through
 // the execution half.
 //
-// The execution half runs those rows through `generated/client` inside
-// `dbos.RunAsTransaction`, so that the event rows and the step checkpoint
-// commit atomically (D2). It is behind the `gopgql_tx` build tag and does not
-// compile today; see store_pg.go for why and for what unblocks it.
+// The execution half — [New] and the `session.Service` it returns — runs those
+// rows through `generated/client` inside `dbos.RunAsTransaction`, so that the
+// event rows and the step checkpoint commit atomically (D2). service.go is the
+// ADK contract and load.go turns the generated result types back into the row
+// types the pure decoder reads; there is deliberately no second decoder written
+// against the generated shapes, because it would be a second opinion about the
+// mapping the corpus test is pinning.
 //
 // # What is deliberately not stored
 //

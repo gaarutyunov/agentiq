@@ -113,9 +113,10 @@ func runWorkflowExpectingError(t *testing.T, dctx dbos.Context, fn func(dbos.Con
 
 // seedSession inserts the parent session row and returns its surrogate uuid.
 //
-// It is raw SQL because `test/` is exempt from the no-sql-outside-generated
-// rule and because M2 has no `create_session` function yet — the fixture is
-// scaffolding for this test, not a shape the application uses.
+// It is raw SQL, and not `agentiq.create_session`, on purpose: these tests are
+// about the append path, and seeding the parent row through the function under
+// test elsewhere would make a failure in one look like a failure in the other.
+// `test/` is exempt from the no-sql-outside-generated rule for exactly this.
 func seedSession(ctx context.Context, t *testing.T, pool *pgxpool.Pool, adkID string) string {
 	t.Helper()
 	var id string

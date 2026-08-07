@@ -1,0 +1,32 @@
+# SPEC.md §6.4's two shared scopes, gathered across the sessions of one app.
+#
+# `app:` state is application-wide and `user:` state is per user, but
+# §7.1's `SessionState` hangs off a session — `HAS_STATE` goes
+# `session ──▶ session_state` and the row carries `session_id`. So the sharing
+# cannot come from the row's own key; it has to come from reading the rows of
+# every session the scope covers and merging them.
+#
+# `sessiontestsuite` asserts both halves: a `app:` key set on one session is
+# visible from a session created afterwards by a *different user*, and a `user:`
+# key is visible to the same user's other sessions and not to anybody else's.
+# Without this a freshly created session reports empty app state.
+#
+# The whole app's sessions are read rather than a narrower slice because the app
+# scope spans exactly that, and the rows are four small columns. `userId` comes
+# back so the user scope can be filtered from the same result instead of costing
+# a second traversal.
+#
+# `updatedAt` is what resolves two sessions holding the same key: last write
+# wins, which is what a delta means (SPEC.md §6.1).
+query SharedState($appName: String!) {
+  session(appName: $appName) {
+    id
+    userId
+    state {
+      scope
+      key
+      value
+      updatedAt
+    }
+  }
+}

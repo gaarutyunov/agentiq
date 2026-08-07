@@ -73,11 +73,25 @@ query Session($appName: String!, $userId: String!, $adkId: String!) {
         toolResponse
         partMetadata
       }
+      # The deltas are selected here and not only under `Query.event` because
+      # SPEC.md §7.2's round-trip property is a statement about a whole
+      # `session.Event`, and `EventActions.StateDelta` is part of one. A session
+      # loaded without them marshals differently from the one that was stored,
+      # which is the property failing rather than a field being omitted.
       actions {
         skipSummarization
         transferToAgent
         escalate
         requestedAuthConfigs
+        stateDeltas {
+          scope
+          key
+          value
+        }
+        artifactDeltas {
+          filename
+          version
+        }
       }
     }
     state {
