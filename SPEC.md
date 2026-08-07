@@ -1486,12 +1486,13 @@ its OpenAI client, and the generated client's compiled traversals — and the
 browser build reaches all of it, because the demo runs `workflow.AgentRun` in
 the page and signs in to OpenRouter from the page. Everything a turn touches on
 the server is therefore linked into the tab as well. The measured size is
-**63.09 MiB (66,154,280 bytes)**.
+**59.96 MiB (62,876,241 bytes)**, built with `-s -w`.
 
 Two thirds of the growth is the chat panel rather than the workflow: the page
 was 44.98 MiB with ADK and the agent loop and no sign-in, and reached 63.09 MiB
 when `model/` — `openaimodel` and the OpenAI SDK under it — was linked in to
-make one turn possible from the browser.
+make one turn possible from the browser. Stripping the symbol table and DWARF,
+which no browser reads, returns 3.1 MiB of that.
 
 72 MiB is the measurement plus room for M3's OCI resolution and M4's tools, so
 that the next milestone reports its growth rather than tripping a gate it was

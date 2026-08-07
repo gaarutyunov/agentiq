@@ -181,6 +181,22 @@ var registered dbos.Queue
 // `dbos.Launch` and before anything can enqueue.
 var registeredDeps Deps
 
+// SetDeps replaces the dependencies AgentRun runs with, without re-registering
+// anything.
+//
+// It exists for the browser, where the deps are not all known at startup: the
+// OpenRouter key arrives when the user completes the PKCE flow (D19), which is
+// after `dbos.Launch`. Calling [Register] again to install it is what a first
+// attempt did, and it hangs the page — the queue and the workflow are already
+// registered and DBOS never returns, so boot stops at "launching the DBOS queue
+// worker" and the runtime never reports ready. Registration is once; the deps
+// are a value.
+//
+// It is safe to call at any time because a workflow reads the deps when it
+// starts, not when it is registered. A run already in flight keeps the deps it
+// began with, which is the behaviour a replay needs anyway.
+func SetDeps(deps Deps) { registeredDeps = deps }
+
 // Register wires every workflow into the DBOS context. It is called once at
 // startup, before dbos.Launch, and it is the only place in the module where
 // dbos.RegisterWorkflow appears (SPEC.md §4.1, §8.1).

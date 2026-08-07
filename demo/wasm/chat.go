@@ -186,26 +186,24 @@ func (c *chat) applyKeyState(ctx context.Context, key string) {
 
 	if !signedIn {
 		c.app.ui.setChat("not signed in", "info", false)
-		// Back to the durability-only registration, so the rest of the page —
-		// the workflow rows, the reload scenario — keeps working signed out.
-		if err := workflow.Register(c.app.dbosCtx, workflow.Deps{}); err != nil {
-			c.app.ui.logf("re-registering the workflow failed: %v", err)
-		}
+		// Back to the durability-only deps, so the rest of the page — the
+		// workflow rows, the reload scenario — keeps working signed out.
+		workflow.SetDeps(workflow.Deps{})
 		return
 	}
 
-	if err := workflow.Register(c.app.dbosCtx, workflow.Deps{
+	// SetDeps and not Register. The workflow and its queue were registered at
+	// boot, before Launch; registering a second time hangs the page at
+	// "launching the DBOS queue worker" and the runtime never reports ready,
+	// which is a boot failure and not a sign-in failure. See workflow.SetDeps.
+	workflow.SetDeps(workflow.Deps{
 		AppName:    appName,
 		DataSource: c.app.dataSource,
 		Handle:     exec.Pgx(c.app.pool),
 		NewModel: func(modelID string) (adkmodel.LLM, error) {
 			return model.New(model.Config{Model: modelID, APIKey: key})
 		},
-	}); err != nil {
-		c.app.ui.logf("registering the agent workflow failed: %v", err)
-		c.app.ui.setChatStatus(fmt.Sprintf("sign-in succeeded but the agent could not be wired: %v", err), "danger")
-		return
-	}
+	})
 	c.app.ui.setChat("signed in — send a message to run one turn", "success", true)
 	go c.renderTranscript(ctx)
 }

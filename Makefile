@@ -46,7 +46,7 @@ ANALYZER_SOURCES := $(shell find analyzer -name '*.go' -not -path 'analyzer/test
 # decision recorded in SPEC.md, not a silent regression.
 #
 # 72 MiB from M2, raised from 40 MiB, and §18.3 carries the argument. Short
-# version: M1 built to 33.9 MiB; M2 measures 63.09 MiB because the page runs
+# version: M1 built to 33.9 MiB; M2 measures 59.96 MiB because the page runs
 # `workflow.AgentRun` itself and signs in to OpenRouter itself, so ADK, the
 # OpenAI SDK and the generated client are all linked into the tab. The headroom
 # is deliberate so that M3 and M4 report their growth instead of tripping a gate
@@ -86,6 +86,12 @@ test-integration:
 test-drift:
 	go test ./test/drift -tags=integration -timeout 20m
 
+# `-ldflags="-s -w"` is not in §16's recipe either. It drops the symbol table and
+# the DWARF debug info, which are 3.3 MB of a binary every visitor downloads and
+# which no browser reads: a Go WASM panic trace comes from the runtime's own
+# tables, not from DWARF. Measured 66,154,280 -> 62,877,487 bytes. Small against
+# the whole (5%), and free.
+#
 # `mkdir -p` is not in §16's recipe and is required: `go build -o dir/file`
 # does not create `dir`, so a clean checkout fails on the first line.
 #
@@ -96,7 +102,7 @@ test-drift:
 # a developer sees on their second run.
 demo:
 	mkdir -p demo/dist
-	GOOS=js GOARCH=wasm go build -o demo/dist/agentiq.wasm ./demo/wasm
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o demo/dist/agentiq.wasm ./demo/wasm
 	cp -f "$$(go env GOROOT)/lib/wasm/wasm_exec.js" demo/dist/
 	cp -rf demo/web/* demo/dist/
 
