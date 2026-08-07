@@ -52,6 +52,10 @@ func hostContext(t *testing.T) agent.Context {
 	t.Helper()
 	ctx := NewMockAgentContext(gomock.NewController(t))
 	ctx.EXPECT().InvocationID().Return("inv-host").AnyTimes()
+	// A host context carries no workflow, which is what this double is for.
+	// The lookup is asked for because a type assertion does not survive the
+	// Runner's own context wrappers — see dbosadk.WithWorkflowContext.
+	ctx.EXPECT().Value(gomock.Any()).Return(nil).AnyTimes()
 	return ctx
 }
 

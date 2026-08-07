@@ -14,6 +14,7 @@ import (
 	"github.com/gaarutyunov/gopgql/exec"
 	adksession "google.golang.org/adk/v2/session"
 
+	"github.com/gaarutyunov/agentiq/dbosadk"
 	"github.com/gaarutyunov/agentiq/generated/client"
 )
 
@@ -120,8 +121,8 @@ type service struct {
 
 var _ adksession.Service = (*service)(nil)
 
-// workflowContext reports whether ctx is a DBOS workflow context — the one
-// place `dbos.RunAsTransaction` and `dbos.RunAsStep` can be called from.
+// workflowContext reports whether ctx is running inside a DBOS workflow — the
+// one place `dbos.RunAsTransaction` and `dbos.RunAsStep` can be called from.
 //
 // The ADK Runner passes the context it was handed straight through to the
 // session service, so inside `workflow.AgentRun` this is the workflow's own
@@ -129,7 +130,12 @@ var _ adksession.Service = (*service)(nil)
 // not. Detecting it rather than requiring the caller to say which they are is
 // what lets one service satisfy both.
 func workflowContext(ctx context.Context) (dbos.Context, bool) {
-	dctx, ok := ctx.(dbos.Context)
+	// Through dbosadk, because a type assertion does not survive the Runner:
+	// ADK wraps the context in its own `agent.InvocationContext` before calling
+	// the session service, and that wrapper is a `context.Context` and nothing
+	// more. The workflow marks itself in the context once and the value
+	// survives every wrapping. See dbosadk.WithWorkflowContext.
+	dctx, ok := dbosadk.WorkflowContext(ctx)
 	if !ok {
 		return nil, false
 	}
@@ -389,6 +395,11 @@ func (s *service) AppendEvent(ctx context.Context, sess adksession.Session, e *a
 		return errors.New("session: AppendEvent with a nil event")
 	}
 	if e.Partial {
+		// Dropped, and reported as stored. ADK's Runner appends every event it
+		// yields, partials included, and an error here would abort a turn that
+		// is behaving correctly. The snapshot is left alone too: a partial is
+		// not part of the conversation, and `dbosadk.NewModel` has already put
+		// it where it can be read (§9.4).
 		return nil
 	}
 
@@ -423,7 +434,43 @@ func (s *service) AppendEvent(ctx context.Context, sess adksession.Session, e *a
 	if err != nil {
 		return fmt.Errorf("session: append event %q: %w", e.ID, err)
 	}
+
+	applyToSnapshot(sess, e)
 	return nil
+}
+
+// applyToSnapshot mirrors the append onto the in-memory session the caller
+// holds, which is what ADK's own implementations do and what its Runner
+// depends on.
+//
+// It is not bookkeeping. The Runner loads the session once at the top of a
+// turn, appends the user's message through this method, and then builds the
+// model request from `session.Events()` — off the object it is holding, not off
+// a fresh load. A service that wrote only to the database left that object
+// empty, and the request went out with no contents at all:
+//
+//	openai: LLM request has no contents to convert
+//
+// retried five times, with the endpoint never called, because the failure is
+// client-side. Nothing in that message points here.
+//
+// `temp:` keys are applied to the snapshot even though they are not stored.
+// That is the same asymmetry §6.4 describes: `temp:` is per-invocation state,
+// visible to the turn that set it and gone afterwards. Dropping it here too
+// would make it invisible to the turn as well, which is not what "temporary"
+// means.
+func applyToSnapshot(sess adksession.Session, e *adksession.Event) {
+	snapshot, ok := sess.(*storedSession)
+	if !ok {
+		// A session this service did not load — the conformance suite's own
+		// double, or a caller's stand-in. It has no snapshot to keep current
+		// and the durable write has already happened.
+		return
+	}
+	snapshot.events = append(snapshot.events, e)
+	for key, value := range e.Actions.StateDelta {
+		snapshot.state[key] = value
+	}
 }
 
 // ---------------------------------------------------------------------------

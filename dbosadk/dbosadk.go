@@ -147,12 +147,53 @@ func invocationID(ctx context.Context) string {
 	return ""
 }
 
-// workflowContext recovers the DBOS context from an ADK context.
+// workflowContextKey is where [WithWorkflowContext] stores the workflow's own
+// context.
+type workflowContextKey struct{}
+
+// WithWorkflowContext marks ctx as running inside the DBOS workflow dctx.
+//
+// It exists because a type assertion does not survive the Runner. ADK wraps the
+// context it is given in its own `agent.InvocationContext` before handing it to
+// a model, a tool or the session service, and that wrapper implements
+// `context.Context` and nothing else — so `ctx.(dbos.Context)` fails on every
+// call ADK makes, however the workflow started it.
+//
+// The symptom is worth recording, because it is not obviously this: every turn
+// fails immediately with `ErrNotInWorkflow`, the model is never called, and the
+// stub endpoint a test points at records zero requests. Nothing in that says
+// "the context was wrapped".
+//
+// A context *value* does survive, because every wrapper delegates `Value` to
+// the context it wraps. So the workflow puts itself in the context once, at the
+// top of the turn, and [WorkflowContext] finds it however deep ADK has nested
+// by the time it calls back.
+func WithWorkflowContext(ctx context.Context, dctx dbos.Context) context.Context {
+	return context.WithValue(ctx, workflowContextKey{}, dctx)
+}
+
+// WorkflowContext recovers the workflow context from ctx, if it is inside one.
+//
+// The direct assertion is tried too, for a caller that passed the workflow
+// context straight through without going near ADK — `workflow.AgentRun` calling
+// [CloseStream] itself, for instance.
+func WorkflowContext(ctx context.Context) (dbos.Context, bool) {
+	if dctx, ok := ctx.Value(workflowContextKey{}).(dbos.Context); ok {
+		return dctx, true
+	}
+	if dctx, ok := ctx.(dbos.Context); ok {
+		return dctx, true
+	}
+	return nil, false
+}
+
+// workflowContext recovers the DBOS context from an ADK context, or says why
+// it could not.
 func workflowContext(ctx context.Context) (dbos.Context, error) {
-	dctx, ok := ctx.(dbos.Context)
+	dctx, ok := WorkflowContext(ctx)
 	if !ok {
-		return nil, fmt.Errorf("%w: got %T, which is not a dbos.Context; "+
-			"the ADK Runner loop must be invoked with the workflow's own context (SPEC.md §8.2, D1)",
+		return nil, fmt.Errorf("%w: got %T, which carries no dbos.Context; "+
+			"the ADK Runner loop must be started with dbosadk.WithWorkflowContext (SPEC.md §8.2, D1)",
 			ErrNotInWorkflow, ctx)
 	}
 	return dctx, nil

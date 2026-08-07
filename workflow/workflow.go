@@ -271,12 +271,12 @@ func AgentRun(ctx dbos.Context, in AgentRunInput) (AgentRunOutput, error) {
 		return AgentRunOutput{}, fmt.Errorf("resolve agent: %w", err)
 	}
 
-	r, err := deps.buildRunner(resolved, workflowUUID)
+	r, svc, err := deps.buildRunner(resolved, workflowUUID)
 	if err != nil {
 		return AgentRunOutput{}, err
 	}
 
-	return runTurn(ctx, r, in, sessionID)
+	return runTurn(ctx, r, svc, in, sessionID)
 }
 
 // durabilityOnlyRun is M1's two-step workflow, kept as the path a process with

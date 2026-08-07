@@ -5,8 +5,9 @@
 # events are normalized rows and not blobs (D3), so "one event in the session"
 # and "five values in the stream" are counts a query can produce.
 #
-# The step definitions live in test/session. Scenarios tagged @needs-gopgql
-# cannot run until gopgql v0.2.3 ships — see the tag's note at the bottom.
+# The step definitions live in test/session (feature_test.go), which runs the
+# real `workflow.AgentRun` against a real `postgres:19beta2` and a stub
+# OpenRouter endpoint.
 
 Feature: Session persistence
   AgentIQ stores an ADK session as normalized rows in the tables it owns, so
@@ -17,7 +18,7 @@ Feature: Session persistence
     Given a running AgentIQ worker
     And an agent seeded by the fixture migration
 
-  @needs-gopgql
+  @session
   Scenario: Partial events are never stored
     # D5 and §9.4. Every other ADK implementation drops partial events on
     # append, and `sessiontestsuite` asserts it, so this is a conformance
@@ -32,7 +33,7 @@ Feature: Session persistence
     Then the session contains exactly one event
     And the DBOS stream contains five values
 
-  @needs-gopgql
+  @session
   Scenario: Event round-trip is byte-identical
     # §7.2's conformance property, at the level of a whole turn:
     #
@@ -48,7 +49,7 @@ Feature: Session persistence
     When the event is appended and the session is reloaded
     Then the reloaded event marshals identically to the original
 
-  @needs-gopgql
+  @session
   Scenario: temp: state is dropped on write and absent on read
     # §7.2 rule 4, the one intentional deviation from round-trip fidelity. The
     # M2 acceptance asks for it to be asserted explicitly rather than left
@@ -60,7 +61,7 @@ Feature: Session persistence
     And the session state does not contain "temp:scratch"
     And no state row carries the scope "temp"
 
-  @needs-gopgql
+  @session
   Scenario: The model returns HTTP 529
     # Failure matrix row F6. The step retry policy is §9.2's spec'd numbers —
     # 5 attempts at base 1s, exponential — not DBOS's defaults, which are zero
@@ -70,25 +71,10 @@ Feature: Session persistence
     Then the model step is retried with exponential backoff
     And the final failure surfaces as an event with an errorCode
 
-  @needs-gopgql
+  @session
   Scenario: The model returns malformed JSON
     # Failure matrix row F7.
     Given a stub OpenRouter endpoint that returns malformed JSON
     When the agent runs one turn
     Then the model step errors and is retried
     And the session records the error event
-
-# @needs-gopgql
-#
-# Every scenario here writes to `agentiq.*` and therefore needs two things that
-# do not exist in gopgql v0.2.2:
-#
-#   1. The tables. gopgql emits no `CREATE TABLE` for a table it owns that some
-#      `@relationship` also maps an edge onto, and exits 0 doing it — 0 of the
-#      7 tables of §7.1. `generated/migrations/` is empty for that reason.
-#   2. A portable `exec.Handle` that `dbos.Tx` satisfies, without which an
-#      `AppendEvent` cannot run inside `dbos.RunAsTransaction` and D2's
-#      exactly-once append is unreachable.
-#
-# Both are gaarutyunov/gopgql#53, fixed on PR #55, unreleased. The tag comes off
-# when v0.2.3 is pinned; nothing in this file changes.
