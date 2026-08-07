@@ -1474,10 +1474,30 @@ exists from M1 because M1 is the browser milestone.
 
 ### 18.3 WASM size gate
 
-The binary is measured on every build and gated at 40 MiB. Standard Go WASM with
+The binary is measured on every build and gated. Standard Go WASM with
 pgx, DBOS and ADK is large; the gate exists to make growth visible rather than
 to enforce a target. Exceeding it is a deliberate decision recorded in this
 document, not a silent regression.
+
+**The gate is 56 MiB from M2, raised from 40 MiB.** This is that decision.
+
+M1 built to 33.9 MiB with pgx and DBOS. M2 adds ADK v2, `model/openaimodel` and
+its OpenAI client, and the generated client's compiled traversals, and the
+browser build reaches them all: the demo runs `workflow.AgentRun` in the page,
+so everything a turn touches on the server is linked into the page too. The
+measured size is **44.98 MiB (47,166,075 bytes)**.
+
+The number is not a target that was aimed at, and 56 MiB is not the measurement
+plus a rounding. It is the measurement plus room for M3's OCI resolution and
+M4's tools, so that the next milestone reports its growth rather than tripping a
+gate it was always going to trip. A gate that has to be raised in the same
+commit as the feature is a gate that reports nothing.
+
+TinyGo remains not an option (§12), so there is no smaller build of the same
+program to choose instead. The lever that exists is what the *browser* links,
+not what the server does: the page pulls in ADK because it runs the workflow
+in-process, and a build that talked to a server instead would not. That is a
+change to the demo's architecture and not to this gate, and M2 does not make it.
 
 -----
 

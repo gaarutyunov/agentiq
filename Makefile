@@ -41,10 +41,16 @@ CUSTOM_GCL := ./bin/custom-gcl
 # deliberately uncompilable, and touching one does not change the binary.
 ANALYZER_SOURCES := $(shell find analyzer -name '*.go' -not -path 'analyzer/testdata/*' 2>/dev/null)
 
-# SPEC.md §18.3. Standard Go WASM with pgx and DBOS is large; the gate makes
-# growth visible rather than enforcing a target. Exceeding it is a decision
-# recorded in SPEC.md, not a silent regression.
-WASM_MAX_BYTES := 41943040
+# SPEC.md §18.3. Standard Go WASM with pgx, DBOS and ADK is large; the gate
+# makes growth visible rather than enforcing a target. Exceeding it is a
+# decision recorded in SPEC.md, not a silent regression.
+#
+# 56 MiB from M2, raised from 40 MiB, and §18.3 carries the argument. Short
+# version: M1 built to 33.9 MiB, M2 measures 44.98 MiB because the page runs
+# `workflow.AgentRun` itself and therefore links ADK and the OpenRouter client,
+# and the headroom is deliberate so that M3 and M4 report their growth instead
+# of tripping a gate they were always going to trip.
+WASM_MAX_BYTES := 58720256
 
 verify: generate-check lint test-unit test-integration demo browser-test
 
