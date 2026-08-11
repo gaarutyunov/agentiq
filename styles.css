@@ -108,3 +108,24 @@ ga-card + ga-card,
 section + ga-card {
   margin: 0;
 }
+
+/* The chat panel's text input.
+ *
+ * A plain <input> and not a kit component: @gaarutyunov/ui-kit has no text
+ * field in the vendored bundle, and a component invented here would be one more
+ * thing to keep in step with the kit when it grows one. The variables are the
+ * kit's own, so it inherits the theme either way. */
+.chat-input {
+  flex: 1 1 20rem;
+  min-width: 0;
+  padding: 0.5rem 0.75rem;
+  font: inherit;
+  color: var(--ga-color-fg, inherit);
+  background: var(--ga-color-surface, transparent);
+  border: 1px solid var(--ga-color-border, currentColor);
+  border-radius: var(--ga-radius-sm, 6px);
+}
+
+.chat-input:disabled {
+  opacity: 0.5;
+}
