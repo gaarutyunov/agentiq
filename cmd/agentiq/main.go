@@ -23,7 +23,10 @@ import (
 
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
 	"github.com/spf13/cobra"
+	adkmodel "google.golang.org/adk/v2/model"
 
+	"github.com/gaarutyunov/agentiq/migrate"
+	"github.com/gaarutyunov/agentiq/model"
 	"github.com/gaarutyunov/agentiq/workflow"
 )
 
@@ -87,12 +90,56 @@ func serve(parent context.Context, addr string) error {
 	}
 	defer func() { _ = dbos.Shutdown(dbosCtx, shutdownTimeout) }()
 
+	// After NewContext, before Launch. NewContext is what runs `dbos migrate`,
+	// and the property graph applied below projects `dbos.*` — applying it
+	// first fails with "relation does not exist". Launch, in turn, starts
+	// recovering workflows, and a recovered run appends session events into
+	// tables that have to be there already.
+	//
+	// This call is new in M2 and its absence was a real gap rather than a
+	// simplification: the server created no `agentiq` schema, applied no table
+	// history and applied no property graph, and only the browser demo — which
+	// did all three in a copy of the sequence — made that look like it worked.
+	// See migrate/migrate.go.
+	//
+	// M2 keeps the pool rather than discarding it: a turn appends events inside
+	// `dbos.RunAsTransaction` and reads sessions and agent rows outside one, so
+	// the server needs both handles for its lifetime. `migrate.Open` is what
+	// keeps pgx out of this file — see migrate/runtime.go.
+	rt, err := migrate.Open(ctx, dbosCtx, databaseURL)
+	if err != nil {
+		return err
+	}
+	defer rt.Close()
+
 	concurrency, err := envInt("AGENTIQ_QUEUE_CONCURRENCY")
 	if err != nil {
 		return err
 	}
 
-	if err := workflow.Register(dbosCtx, workflow.Deps{WorkerConcurrency: concurrency}); err != nil {
+	// SPEC.md §10.1: the server reads its OpenRouter key from the environment,
+	// once, here. Reading it inside the workflow would be `os.Getenv` in
+	// workflow code — forbidden by §9.1 and caught by the §17.1 analyzer — and
+	// it would mean a replay depended on the environment of whichever executor
+	// recovered it.
+	//
+	// An absent key is not fatal at startup. A worker with no key can still
+	// recover and complete the durable-execution rows (F1-F5), which need no
+	// model; the failure belongs at the first generation, where it can say
+	// which run wanted a model and could not have one.
+	apiKey, keyErr := model.APIKeyFromEnv()
+
+	if err := workflow.Register(dbosCtx, workflow.Deps{
+		WorkerConcurrency: concurrency,
+		DataSource:        rt.DataSource,
+		Handle:            rt.Handle,
+		NewModel: func(modelID string) (adkmodel.LLM, error) {
+			if keyErr != nil {
+				return nil, keyErr
+			}
+			return model.New(model.Config{Model: modelID, APIKey: apiKey})
+		},
+	}); err != nil {
 		return fmt.Errorf("register workflows: %w", err)
 	}
 

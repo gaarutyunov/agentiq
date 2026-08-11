@@ -1,0 +1,104 @@
+# SPEC.md §7.1's `Query.session`: one session with its events, their parts and
+# their actions, plus the projected session state.
+#
+# The root field is the physical table name, which is what gopgql names a
+# queryable root — `session`, not `Session`. There is no separate singular
+# root: a session is selected by the natural key SPEC.md §6.1 gives it,
+# `(app_name, user_id, id)`, where `adkId` is ADK's own session id (the surrogate
+# `id` is gopgql's uuid — see schema/agentiq.graphql).
+#
+# `parts` comes back ordered by `part_index`, which is what SPEC.md §7.2 rule 2
+# requires of the read side.
+query Session($appName: String!, $userId: String!, $adkId: String!) {
+  session(appName: $appName, userId: $userId, adkId: $adkId) {
+    id
+    adkId
+    appName
+    userId
+    workflowUuid
+    agentDigest
+    createdAt
+    lastUpdateAt
+    events {
+      id
+      adkId
+      sequence
+      invocationId
+      author
+      branch
+      timestamp
+      turnComplete
+      interrupted
+      isolationScope
+      errorCode
+      errorMessage
+      contentRole
+      longRunningToolIds
+      requestedInput
+      routes
+      nodeInfo
+      groundingMetadata
+      usageMetadata
+      citationMetadata
+      customMetadata
+      stepFunctionId
+      workflowUuid
+      parts {
+        partIndex
+        text
+        thought
+        thoughtSignature
+        functionCallId
+        functionCallName
+        functionCallArgs
+        functionResponseId
+        functionResponseName
+        functionResponseResponse
+        inlineDataMimeType
+        inlineDataBytes
+        inlineDataDisplayName
+        fileDataMimeType
+        fileDataUri
+        fileDataDisplayName
+        executableCodeLanguage
+        executableCodeCode
+        codeExecutionOutcome
+        codeExecutionOutput
+        videoMetadataStartOffset
+        videoMetadataEndOffset
+        videoMetadataFps
+        audioTranscription
+        mediaResolution
+        toolCall
+        toolResponse
+        partMetadata
+      }
+      # The deltas are selected here and not only under `Query.event` because
+      # SPEC.md §7.2's round-trip property is a statement about a whole
+      # `session.Event`, and `EventActions.StateDelta` is part of one. A session
+      # loaded without them marshals differently from the one that was stored,
+      # which is the property failing rather than a field being omitted.
+      actions {
+        skipSummarization
+        transferToAgent
+        escalate
+        requestedAuthConfigs
+        stateDeltas {
+          scope
+          key
+          value
+        }
+        artifactDeltas {
+          filename
+          version
+        }
+      }
+    }
+    state {
+      scope
+      key
+      value
+      updatedAt
+    }
+  }
+}

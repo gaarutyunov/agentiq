@@ -1,0 +1,82 @@
+# SPEC.md §7.1's `Query.event`: one event with its parts, its actions and the
+# state and artifact deltas those actions set.
+#
+# `sessionId` is the parent session's surrogate uuid and `adkId` is ADK's own
+# `Event.ID` — together SPEC.md §6.1's `(session_id, id)` identity.
+#
+# `stepFunctionId` and `workflowUuid` are the provenance columns: with them a
+# reader walks from an event to the `dbos.operation_outputs` row that produced
+# it, which is `Event ──PRODUCED_BY──▶ Step` (SPEC.md §6.2).
+query Event($sessionId: ID!, $adkId: String!) {
+  event(sessionId: $sessionId, adkId: $adkId) {
+    id
+    adkId
+    sessionId
+    sequence
+    invocationId
+    author
+    branch
+    timestamp
+    turnComplete
+    interrupted
+    isolationScope
+    errorCode
+    errorMessage
+    contentRole
+    longRunningToolIds
+    requestedInput
+    routes
+    nodeInfo
+    groundingMetadata
+    usageMetadata
+    citationMetadata
+    customMetadata
+    stepFunctionId
+    workflowUuid
+    parts {
+      partIndex
+      text
+      thought
+      thoughtSignature
+      functionCallId
+      functionCallName
+      functionCallArgs
+      functionResponseId
+      functionResponseName
+      functionResponseResponse
+      inlineDataMimeType
+      inlineDataBytes
+      inlineDataDisplayName
+      fileDataMimeType
+      fileDataUri
+      fileDataDisplayName
+      executableCodeLanguage
+      executableCodeCode
+      codeExecutionOutcome
+      codeExecutionOutput
+      videoMetadataStartOffset
+      videoMetadataEndOffset
+      videoMetadataFps
+      audioTranscription
+      mediaResolution
+      toolCall
+      toolResponse
+      partMetadata
+    }
+    actions {
+      skipSummarization
+      transferToAgent
+      escalate
+      requestedAuthConfigs
+      stateDeltas {
+        scope
+        key
+        value
+      }
+      artifactDeltas {
+        filename
+        version
+      }
+    }
+  }
+}

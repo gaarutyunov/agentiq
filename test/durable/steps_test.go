@@ -142,13 +142,32 @@ func (s *suite) aRunningWorkerThroughProxy() error {
 	return s.aRunningWorker()
 }
 
+// theGraphIsApplied applies everything AgentIQ owns. The property graph is the
+// last thing the sequence does, and the only part of it this scenario then
+// reads, which is why the step reads as it does in the feature file.
+//
+// It applies twice, and that is an assertion rather than belt and braces: two
+// of the three programs that run this sequence re-run it routinely — the
+// browser on every tab reload (failure-matrix row F22) and the server on every
+// restart — and neither has goose to tell it what has already been applied. A
+// second application that failed would be a demo that works exactly once.
 func (s *suite) theGraphIsApplied() error {
-	return harness.ApplyGraph(s.ctx, s.sqlPool())
+	if err := harness.ApplyMigrations(s.ctx, s.sqlPool()); err != nil {
+		return err
+	}
+	if err := harness.ApplyMigrations(s.ctx, s.sqlPool()); err != nil {
+		return fmt.Errorf("re-applying must be a no-op (the browser reloads, the server restarts): %w", err)
+	}
+	return nil
 }
 
 // --- When ------------------------------------------------------------------
 
-func (s *suite) aRunIsEnqueued() error { return s.enqueue("sha256:m1-placeholder-digest") }
+// The reserved digest, so the run takes the two-step shape these rows are
+// about: they kill a worker between checkpoints, which is a property of where
+// the checkpoints are and not of what runs between them. See
+// workflow.DurabilityProbeDigest.
+func (s *suite) aRunIsEnqueued() error { return s.enqueue(workflow.DurabilityProbeDigest) }
 
 // aRunWithNoDigestIsEnqueued drives failure-matrix row F4. workflow.resolveAgent
 // rejects an empty digest, which is the only permanent step error M1's

@@ -41,10 +41,17 @@ CUSTOM_GCL := ./bin/custom-gcl
 # deliberately uncompilable, and touching one does not change the binary.
 ANALYZER_SOURCES := $(shell find analyzer -name '*.go' -not -path 'analyzer/testdata/*' 2>/dev/null)
 
-# SPEC.md §18.3. Standard Go WASM with pgx and DBOS is large; the gate makes
-# growth visible rather than enforcing a target. Exceeding it is a decision
-# recorded in SPEC.md, not a silent regression.
-WASM_MAX_BYTES := 41943040
+# SPEC.md §18.3. Standard Go WASM with pgx, DBOS and ADK is large; the gate
+# makes growth visible rather than enforcing a target. Exceeding it is a
+# decision recorded in SPEC.md, not a silent regression.
+#
+# 72 MiB from M2, raised from 40 MiB, and §18.3 carries the argument. Short
+# version: M1 built to 33.9 MiB; M2 measures 59.96 MiB because the page runs
+# `workflow.AgentRun` itself and signs in to OpenRouter itself, so ADK, the
+# OpenAI SDK and the generated client are all linked into the tab. The headroom
+# is deliberate so that M3 and M4 report their growth instead of tripping a gate
+# they were always going to trip.
+WASM_MAX_BYTES := 75497472
 
 verify: generate-check lint test-unit test-integration demo browser-test
 
@@ -79,13 +86,25 @@ test-integration:
 test-drift:
 	go test ./test/drift -tags=integration -timeout 20m
 
+# `-ldflags="-s -w"` is not in §16's recipe either. It drops the symbol table and
+# the DWARF debug info, which are 3.3 MB of a binary every visitor downloads and
+# which no browser reads: a Go WASM panic trace comes from the runtime's own
+# tables, not from DWARF. Measured 66,154,280 -> 62,877,487 bytes. Small against
+# the whole (5%), and free.
+#
 # `mkdir -p` is not in §16's recipe and is required: `go build -o dir/file`
 # does not create `dir`, so a clean checkout fails on the first line.
+#
+# `cp -f` is not in §16's recipe either, and without it the target works once.
+# GOROOT files are mode 0444, so the copied wasm_exec.js is read-only and the
+# *second* `make demo` in the same checkout fails with "Permission denied" —
+# a failure CI never sees, because CI always starts from a clean checkout, and
+# a developer sees on their second run.
 demo:
 	mkdir -p demo/dist
-	GOOS=js GOARCH=wasm go build -o demo/dist/agentiq.wasm ./demo/wasm
-	cp "$$(go env GOROOT)/lib/wasm/wasm_exec.js" demo/dist/
-	cp -r demo/web/* demo/dist/
+	GOOS=js GOARCH=wasm go build -ldflags="-s -w" -o demo/dist/agentiq.wasm ./demo/wasm
+	cp -f "$$(go env GOROOT)/lib/wasm/wasm_exec.js" demo/dist/
+	cp -rf demo/web/* demo/dist/
 
 # `-v` is not in §16's recipe. The suite skips when AGENTIQ_PREVIEW_URL is
 # unset — there is no deployed page to drive — and without `-v` a whole-suite

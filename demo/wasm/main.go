@@ -16,7 +16,10 @@
 //     There is no `dbos` CLI in a WASM page and there is no pre-seeded data
 //     directory; the migrations are library calls over the pgxpool, which is
 //     the reading SPEC.md §16 left open and this file settles.
-//  3. The generated `CREATE PROPERTY GRAPH` runs.
+//  3. `migrate.Apply` creates the `agentiq` schema, applies the generated
+//     `agentiq.*` table history and runs the generated `CREATE PROPERTY GRAPH`.
+//     It is the same call, in the same order, that `cmd/agentiq` and the
+//     integration harness make.
 //  4. A notification probe answers the one question SPEC.md §12.4 left open
 //     (see probe.go) — the highest-value thing a real browser can report.
 //  5. `dbos.Launch` recovers whatever the previous tab left in flight, which is
@@ -74,11 +77,12 @@ import (
 	"time"
 
 	"github.com/dbos-inc/dbos-transact-golang/dbos"
+	"github.com/gaarutyunov/gopgql/exec"
 	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/gaarutyunov/agentiq/demo"
 	"github.com/gaarutyunov/agentiq/generated/client"
+	"github.com/gaarutyunov/agentiq/migrate"
 	"github.com/gaarutyunov/agentiq/wasmpg"
 	"github.com/gaarutyunov/agentiq/workflow"
 )
@@ -118,9 +122,14 @@ const (
 	// callers, which is the kind of number that silently becomes wrong.
 	logicalConns = 8
 
-	// demoDigest stands in for a real agent digest. M1 has no agent
-	// (SPEC.md §20 M1); the workflow only asserts the digest is non-empty.
-	demoDigest = "sha256:0000000000000000000000000000000000000000000000000000000000000000"
+	// demoDigest is the reserved digest that runs the durability shape rather
+	// than an agent — see workflow.DurabilityProbeDigest. It is what the "Start
+	// a workflow" button enqueues, and it is deliberately not the chat's agent:
+	// that button demonstrates the reload-and-resume property, which wants two
+	// checkpoints with a gap between them and neither a model nor a key.
+	//
+	// The chat panel enqueues the fixture agent instead (chat.go).
+	demoDigest = workflow.DurabilityProbeDigest
 
 	// refreshInterval is how often the property-graph traversal re-runs. It is
 	// slower than the workflow's own 2s checkpoint delay so a person can watch
@@ -138,6 +147,15 @@ type app struct {
 	client  *client.Client
 	backend *backend
 	facts   runtimeFacts
+
+	// dataSource is what a chat turn's appends transact on (D2). It is built at
+	// boot rather than at sign-in because `dbos.NewDataSource` creates its own
+	// `transaction_completion` table, which is migration work.
+	dataSource *dbos.DataSource
+
+	// chat is M2's turn: PKCE sign-in, one message, and the transcript read
+	// back from the graph. See chat.go.
+	chat *chat
 }
 
 func main() {
@@ -230,10 +248,10 @@ func (a *app) boot(ctx context.Context) error {
 	a.dbosCtx = dbosCtx
 	a.facts.Migrated = true
 
-	u.stage("creating the property graph")
-	name, err := a.applyGraph(ctx)
+	u.stage("creating the agentiq schema and the property graph")
+	name, err := a.migrate(ctx)
 	if err != nil {
-		return fmt.Errorf("create the property graph: %w", err)
+		return fmt.Errorf("migrate: %w", err)
 	}
 	a.facts.GraphMigration = name
 	u.setRuntime(a.facts)
@@ -244,6 +262,17 @@ func (a *app) boot(ctx context.Context) error {
 	u.stage("probing notification delivery")
 	u.setProbe(runNotifyProbe(ctx, pool, be, routeInline))
 
+	// The DataSource has to exist before the workflow is registered with it,
+	// and before Launch, because a recovered run transacts on it.
+	ds, err := dataSourceFor(dbosCtx, pool)
+	if err != nil {
+		return err
+	}
+	a.dataSource = ds
+
+	// Registered signed-out. The agent deps arrive with the key, at sign-in,
+	// and until then the page runs the durability-only shape — which is what
+	// keeps the reload and invalid-SQL scenarios working with no key at all.
 	u.stage("registering workflows")
 	if err := workflow.Register(dbosCtx, workflow.Deps{}); err != nil {
 		return fmt.Errorf("register workflows: %w", err)
@@ -268,6 +297,8 @@ func (a *app) boot(ctx context.Context) error {
 
 	go a.watchdog(ctx, mux)
 
+	a.wireChat(ctx)
+
 	u.onClick("start", func() { a.startRun(ctx) })
 	u.onClick("bad-sql", func() { a.runInvalidSQL(ctx) })
 	u.onClick("reload", func() { js.Global().Get("location").Call("reload") })
@@ -277,27 +308,31 @@ func (a *app) boot(ctx context.Context) error {
 	return nil
 }
 
-// applyGraph runs the generated property-graph DDL.
+// migrate applies everything AgentIQ owns: the `agentiq` schema, the generated
+// table history, and the generated property graph, in that order.
 //
-// Down then Up, every boot. SQL/PGQ has no `CREATE ... IF NOT EXISTS` for a
-// property graph, and the database survives the reload in IndexedDB, so a bare
-// CREATE would fail on the second page load — the very load failure-matrix row
-// F22 is about. A property graph holds no data of its own (it is a declaration
-// over `dbos.*`), so recreating it costs nothing.
-func (a *app) applyGraph(ctx context.Context) (string, error) {
-	ms, err := demo.GraphMigrations()
-	if err != nil {
+// The order and the re-application rules are `migrate`'s, not this file's, and
+// deliberately so — the same sequence has to run in the integration harness and
+// in `cmd/agentiq`, and a browser-only copy of it is how the page ends up being
+// the only consumer that works. What is specific here is only the handle: the
+// pool built over `wasmpg.Dialer`, because there is no connection string in a
+// WASM page.
+//
+// It runs on every boot, including the reload failure-matrix row F22 is about.
+// `migrate` is written for that: the schema and the tables are recorded in a
+// ledger and skipped once applied, and the property graph — which holds no data
+// and has no `CREATE ... IF NOT EXISTS` in SQL/PGQ — is dropped and recreated.
+func (a *app) migrate(ctx context.Context) (string, error) {
+	if err := migrate.Apply(ctx, a.pool); err != nil {
 		return "", err
 	}
 
-	var applied []string
-	for _, m := range ms {
-		if _, err := a.pool.Exec(ctx, m.Down); err != nil {
-			return "", fmt.Errorf("%s (down): %w", m.Name, err)
-		}
-		if _, err := a.pool.Exec(ctx, m.Up); err != nil {
-			return "", fmt.Errorf("%s (up): %w", m.Name, err)
-		}
+	graph, err := migrate.Graph()
+	if err != nil {
+		return "", err
+	}
+	applied := make([]string, 0, len(graph))
+	for _, m := range graph {
 		applied = append(applied, m.Name)
 	}
 	return strings.Join(applied, ", "), nil
@@ -380,7 +415,7 @@ func (a *app) list(ctx context.Context) ([]workflowRow, error) {
 		// stop showing the first. It also stops a failing traversal from
 		// turning the refresh loop into a hot loop that starves the queue
 		// worker of connections, which is exactly what it did.
-		found, err := a.client.WorkflowWithSteps(ctx, a.pool, client.WorkflowWithStepsInput{WorkflowUuid: s.ID})
+		found, err := a.client.WorkflowWithSteps(ctx, exec.Pgx(a.pool), client.WorkflowWithStepsInput{WorkflowUuid: s.ID})
 		if err != nil {
 			row.StepsError = err.Error()
 			rows = append(rows, row)

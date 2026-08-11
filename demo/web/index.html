@@ -54,6 +54,37 @@
       </section>
 
       <ga-card>
+        <h2>Chat</h2>
+        <p class="hint">
+          One turn of a real ADK agent, running as a DBOS workflow inside this
+          tab. The agent is the row a fixture migration seeded; the model call is
+          a durable step; every event is a row in
+          <code>agentiq.event</code>, and the transcript below is read back from
+          the property graph rather than from anything the page kept in memory.
+        </p>
+        <ga-note tone="info" title="You bring your own key">
+          Sign-in is OpenRouter's PKCE flow and there is no backend: the key it
+          issues is yours, is held in <code>sessionStorage</code> for this tab
+          only, and is cleared when you sign out or close the tab. This page
+          ships no credential of its own, so each turn is billed to whoever ran
+          it.
+        </ga-note>
+        <div class="actions">
+          <ga-button id="sign-in" variant="primary">Sign in with OpenRouter</ga-button>
+          <ga-button id="sign-out" variant="ghost" disabled>Sign out</ga-button>
+        </div>
+        <div class="actions">
+          <input id="chat-input" class="chat-input" type="text"
+                 placeholder="Ask the agent something" disabled />
+          <ga-button id="chat-send" variant="primary" disabled>Send</ga-button>
+        </div>
+        <ga-alert id="chat-status" tone="info" title="Session">not signed in</ga-alert>
+        <ga-table
+          id="events"
+          columns='[{"label":"#","width":"56px"},{"label":"author","width":"120px"},{"label":"parts"}]'></ga-table>
+      </ga-card>
+
+      <ga-card>
         <h2>Property graph</h2>
         <p class="hint">
           Rows come from DBOS's own workflow list; the step chain in the last

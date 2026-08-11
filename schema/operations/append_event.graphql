@@ -1,0 +1,24 @@
+# SPEC.md §8.3, D2. The write half of session persistence.
+#
+# Compiles to a named-notation call on `agentiq.append_event` — no graph, no
+# GRAPH_TABLE, no hand-written SQL in Go. The generated method takes an
+# `exec.Handle` like every other, which since gopgql v0.3.0 a `dbos.Tx`
+# satisfies: that is what lets the append run inside the transaction
+# `dbos.RunAsTransaction` opened, alongside the step checkpoint.
+mutation AppendEvent(
+  $sessionId: ID!
+  $event: JSON!
+  $parts: JSON!
+  $actions: JSON!
+  $stateDeltas: JSON!
+  $artifactDeltas: JSON!
+) {
+  appendEvent(
+    sessionId: $sessionId
+    event: $event
+    parts: $parts
+    actions: $actions
+    stateDeltas: $stateDeltas
+    artifactDeltas: $artifactDeltas
+  )
+}

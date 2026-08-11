@@ -1,0 +1,27 @@
+# The same `Query.session` root as session.graphql, selecting only the session's
+# own columns.
+#
+# It exists because ADK hands `Service.AppendEvent` the natural key —
+# `(appName, userId, sessionId)` — and `agentiq.append_event` is keyed on the
+# surrogate uuid gopgql owns. Something has to turn one into the other inside
+# the transaction the append runs in, and a session that is not there has to
+# come back as "not found": `sessiontestsuite`'s
+# `AppendEvent/when_session_not_found_should_fail` asserts exactly that, which
+# is why the resolution cannot be folded into `createSession`'s upsert.
+#
+# Selecting no events is the whole point of the second operation. `Session`
+# above traverses HAS_EVENT, HAS_PART, HAS_ACTIONS and HAS_STATE and assembles
+# the entire conversation; an append that used it would read the whole session
+# back on every event, and grow quadratically over a turn.
+query SessionRef($appName: String!, $userId: String!, $adkId: String!) {
+  session(appName: $appName, userId: $userId, adkId: $adkId) {
+    id
+    adkId
+    appName
+    userId
+    workflowUuid
+    agentDigest
+    createdAt
+    lastUpdateAt
+  }
+}

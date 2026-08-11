@@ -1,0 +1,22 @@
+# `Sessions` with the user dropped from the filter.
+#
+# ADK's `ListRequest.UserID` is optional and an empty one means "every user of
+# this app" — `sessiontestsuite`'s List case creates two sessions for one user
+# and one for another, then asserts that listing with no user returns all three.
+#
+# It is a second operation rather than a nullable argument because gopgql
+# compiles each operation to one statement: an argument that is sometimes a
+# filter and sometimes not is two statements, and writing them as two is what
+# keeps each one readable as SQL.
+query SessionsByApp($appName: String!) {
+  sessions: session(appName: $appName) {
+    id
+    adkId
+    appName
+    userId
+    workflowUuid
+    agentDigest
+    createdAt
+    lastUpdateAt
+  }
+}

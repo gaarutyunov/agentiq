@@ -3,82 +3,13 @@ package harness
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/gaarutyunov/agentiq/generated/client"
+	"github.com/gaarutyunov/agentiq/migrate"
+	"github.com/gaarutyunov/gopgql/exec"
 )
-
-// Goose direction markers. `generated/graph/` is a goose history
-// (generated/graph/README.md).
-const (
-	gooseUp   = "-- +goose Up"
-	gooseDown = "-- +goose Down"
-)
-
-// GraphMigration is one generated property-graph migration.
-type GraphMigration struct {
-	Name string
-	Up   string
-	Down string
-}
-
-// GeneratedGraphMigrations reads `generated/graph/*.sql` from the checkout.
-//
-// It reads from disk rather than embedding because //go:embed cannot reference
-// a parent directory and nothing under `test/` sits above `generated/`. The
-// alternative — importing the `demo` package, which solves the same problem
-// with a generated copy — would tie the server-side suite to the browser demo's
-// packaging decisions for no gain.
-func GeneratedGraphMigrations() ([]GraphMigration, error) {
-	root, err := moduleRoot()
-	if err != nil {
-		return nil, err
-	}
-	dir := filepath.Join(root, "generated", "graph")
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("harness: read %s: %w", dir, err)
-	}
-
-	var out []GraphMigration
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), ".sql") {
-			continue
-		}
-		body, err := os.ReadFile(filepath.Join(dir, e.Name())) //nolint:gosec // a path this package built from its own source location
-		if err != nil {
-			return nil, fmt.Errorf("harness: read %s: %w", e.Name(), err)
-		}
-		m, err := splitGoose(e.Name(), string(body))
-		if err != nil {
-			return nil, err
-		}
-		out = append(out, m)
-	}
-	if len(out) == 0 {
-		return nil, fmt.Errorf("harness: no migrations in %s; run `go generate ./...`", dir)
-	}
-	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
-	return out, nil
-}
-
-func splitGoose(name, body string) (GraphMigration, error) {
-	up := strings.Index(body, gooseUp)
-	down := strings.Index(body, gooseDown)
-	if up < 0 || down < 0 || down < up {
-		return GraphMigration{}, fmt.Errorf("harness: %s: goose markers missing or out of order", name)
-	}
-	return GraphMigration{
-		Name: name,
-		Up:   strings.TrimSpace(body[up+len(gooseUp) : down]),
-		Down: strings.TrimSpace(body[down+len(gooseDown):]),
-	}, nil
-}
 
 // OpenPool opens a writable pool and registers its close.
 //
@@ -100,30 +31,22 @@ func OpenPool(ctx context.Context, tb testingTB, dsn string) *pgxpool.Pool {
 	return pool
 }
 
-// ApplyGraph drops and recreates the generated property graph.
+// ApplyMigrations applies everything AgentIQ owns: the `agentiq` schema, the
+// generated `agentiq.*` table history, and the generated property graph.
 //
-// Down-then-Up rather than Up alone: a property graph is a view over `dbos.*`
-// and holds no data of its own, and CREATE PROPERTY GRAPH on one that already
-// exists is a duplicate-object error. Applying it twice has to be harmless,
-// because the browser build applies it on every boot (SPEC.md §13, F22).
+// The sequence itself belongs to `migrate`, which is also what `cmd/agentiq`
+// and the browser demo run. A suite that applied its own version of it would be
+// asserting on an ordering the shipped programs do not use — and the previous
+// version of this function, which applied the property graph and nothing else,
+// is exactly how the missing `CREATE SCHEMA agentiq` stayed invisible until the
+// graph grew its first `agentiq.*` vertex.
 //
-// It runs only after `dbos.*` exists — the graph references those tables, so
-// applying it before the worker has migrated fails with "relation does not
-// exist".
-func ApplyGraph(ctx context.Context, pool *pgxpool.Pool) error {
-	migrations, err := GeneratedGraphMigrations()
-	if err != nil {
-		return err
-	}
-	for i := len(migrations) - 1; i >= 0; i-- {
-		if _, err := pool.Exec(ctx, migrations[i].Down); err != nil {
-			return fmt.Errorf("harness: %s down: %w", migrations[i].Name, err)
-		}
-	}
-	for _, m := range migrations {
-		if _, err := pool.Exec(ctx, m.Up); err != nil {
-			return fmt.Errorf("harness: %s up: %w", m.Name, err)
-		}
+// It runs only after `dbos.*` exists — the property graph projects those
+// tables, so applying it before the worker has migrated fails with "relation
+// does not exist".
+func ApplyMigrations(ctx context.Context, pool *pgxpool.Pool) error {
+	if err := migrate.Apply(ctx, pool); err != nil {
+		return fmt.Errorf("harness: %w", err)
 	}
 	return nil
 }
@@ -135,7 +58,11 @@ func ApplyGraph(ctx context.Context, pool *pgxpool.Pool) error {
 // hand-written SQL, and a suite that hand-wrote this query would be asserting
 // on a query M1 does not ship.
 func GraphWorkflow(ctx context.Context, pool *pgxpool.Pool, id string) ([]client.WorkflowWithStepsWorkflow, error) {
-	rows, err := client.New().WorkflowWithSteps(ctx, pool, client.WorkflowWithStepsInput{WorkflowUuid: id})
+	// exec.Pgx adapts the pgx pool to gopgql's portable handle. Since gopgql
+	// v0.3.0 `exec.Handle` is defined over gopgql's own Cursor/Tag types rather
+	// than pgx's, which is what lets a `dbos.Tx` reach the same generated
+	// methods — the adapter is the price of that, and it is one call.
+	rows, err := client.New().WorkflowWithSteps(ctx, exec.Pgx(pool), client.WorkflowWithStepsInput{WorkflowUuid: id})
 	if err != nil {
 		return nil, fmt.Errorf("harness: graph query: %w", err)
 	}

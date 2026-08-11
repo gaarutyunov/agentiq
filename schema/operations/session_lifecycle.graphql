@@ -1,0 +1,24 @@
+# SPEC.md §8.3. The write half of the session lifecycle, as named-notation calls
+# on the functions migrate/sql/0003 creates. Both take an `exec.Handle`, so both
+# can run on the transaction `dbos.RunAsTransaction` hands in.
+mutation CreateSession(
+  $adkId: String!
+  $appName: String!
+  $userId: String!
+  $agentDigest: String!
+  $workflowUuid: String
+  $state: JSON!
+) {
+  createSession(
+    adkId: $adkId
+    appName: $appName
+    userId: $userId
+    agentDigest: $agentDigest
+    workflowUuid: $workflowUuid
+    state: $state
+  )
+}
+
+mutation DeleteSession($adkId: String!, $appName: String!, $userId: String!) {
+  deleteSession(adkId: $adkId, appName: $appName, userId: $userId)
+}

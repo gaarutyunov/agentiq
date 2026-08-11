@@ -78,9 +78,20 @@ type Worker struct {
 
 	cmd *exec.Cmd
 
+	// done is closed once the process has been reaped, and reaping happens in
+	// a goroutine started with the process rather than on demand.
+	//
+	// That is what makes a worker which dies during startup report as a worker
+	// which died. `exec.Cmd.ProcessState` stays nil until something calls Wait,
+	// so a readiness loop that polled it would see a live process for the whole
+	// timeout: a `serve` that failed in the first second — a bad DATABASE_URL,
+	// a migration that will not apply — used to surface 90 seconds later as
+	// "worker did not become ready: timed out", which names the symptom of
+	// every possible cause and the cause of none.
+	done chan struct{}
+
 	mu      sync.Mutex
 	output  bytes.Buffer
-	waited  bool
 	waitErr error
 }
 
@@ -102,7 +113,7 @@ func StartWorker(ctx context.Context, tb testingTB, dsn string, extraEnv ...stri
 		tb.Fatalf("harness: pick a free port: %v", err)
 	}
 
-	w := &Worker{Addr: addr}
+	w := &Worker{Addr: addr, done: make(chan struct{})}
 	// The worker is not given the test's context: cancelling it must not be
 	// what stops the process, because every scenario here is about how the
 	// process dies. Cleanup kills it explicitly.
@@ -127,6 +138,13 @@ func StartWorker(ctx context.Context, tb testingTB, dsn string, extraEnv ...stri
 		tb.Fatalf("harness: start the worker: %v", err)
 	}
 	w.cmd = cmd
+	go func() {
+		err := cmd.Wait()
+		w.mu.Lock()
+		w.waitErr = err
+		w.mu.Unlock()
+		close(w.done)
+	}()
 	tb.Cleanup(func() { _ = w.Kill() })
 
 	if err := w.waitReady(ctx, 90*time.Second); err != nil {
@@ -193,30 +211,31 @@ func (w *Worker) Stop() error {
 	return w.wait()
 }
 
-// wait reaps the process at most once; Wait on an already-reaped *exec.Cmd
-// returns a misleading "Wait was already called".
+// wait blocks until the reaper has collected the process, and returns what Wait
+// returned.
+//
+// It never calls Wait itself: exactly one goroutine does, so a second caller
+// cannot get the misleading "Wait was already called". The lock is taken only
+// around the result, never around the wait, because stdout and stderr are
+// written under the same lock and holding it for the life of the process would
+// deadlock the child's first log line against its own reaper.
 func (w *Worker) wait() error {
+	<-w.done
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	if w.waited {
-		return w.waitErr
-	}
-	w.waited = true
-	w.waitErr = w.cmd.Wait()
 	return w.waitErr
 }
 
-// exited reports whether the process is already gone.
+// exited reports whether the process is already gone, without blocking.
 func (w *Worker) exited() (bool, error) {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.waited {
+	select {
+	case <-w.done:
+		w.mu.Lock()
+		defer w.mu.Unlock()
 		return true, w.waitErr
+	default:
+		return false, nil
 	}
-	if w.cmd.ProcessState != nil {
-		return true, nil
-	}
-	return false, nil
 }
 
 // Output returns everything the worker has written to stdout and stderr. It is

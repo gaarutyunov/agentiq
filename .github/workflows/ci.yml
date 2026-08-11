@@ -11,7 +11,46 @@
 # are real gates.
 name: CI
 
-on: [push, pull_request]
+# A commit on a PR branch must produce exactly **one** run of this workflow.
+#
+# `on: [push, pull_request]` fires twice for the same commit — once per event —
+# and the two race each other on the same runner pool. That is not a tidiness
+# problem: the duplicates contend for headless Chrome and one of them loses.
+#
+#   browser_test.go:57: Received unexpected error: websocket url timeout reached
+#   Messages: start headless Chrome
+#   --- FAIL: TestBrowserRuntime (20.07s)
+#
+# Commit 57e0aad has two `verify` runs three seconds apart, one SUCCESS and one
+# FAILURE, differing only in which won the race.
+#
+# The first fix was the concurrency group below, which let both events fire and
+# cancelled the loser. It stopped the contention and introduced a worse problem:
+# **a cancelled run stays in the pull request's check rollup forever**, so every
+# PR read `UNSTABLE` while genuinely green, and the board digest reported this
+# one as `CI-RED FAIL(1)`. A gate that always shows red is exactly as unreadable
+# as one that always shows green — it destroys the ability to notice a real
+# failure, which is the only thing the concurrency fix was for.
+#
+# So the events are narrowed instead: a push to a PR branch is not a trigger at
+# all, and the `pull_request` event is the single run. Pushes to `main` still
+# build, because nothing else covers a direct commit or a merge.
+#
+# The concurrency group stays, and still earns its place — it is what cancels a
+# superseded run when commits land on the same branch in quick succession. It is
+# simply no longer what deduplicates the two event types, which is a job it
+# could only ever do by leaving the cancelled artifact behind.
+#
+# SPEC.md §18.2 — milestones do not add or remove CI jobs. This changes *when*
+# the existing job fires. It adds no job and no step.
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 # §18.1 has no `permissions:` block, so it would inherit the repository
 # default. Nothing in this job writes to the repository — deploy.yml and
@@ -25,13 +64,25 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # go.mod's line is `go 1.25.0`; '1.25' resolves to the newest 1.25.x.
-      # GOTOOLCHAIN is deliberately left at its `auto` default: with a 1.25.x
+      # go.mod's line is `go 1.26.5`; '1.26' resolves to the newest 1.26.x.
+      # GOTOOLCHAIN is deliberately left at its `auto` default: with a 1.26.x
       # toolchain selected here, `auto` keeps it, and pinning a patch release
       # would freeze the module to a toolchain go.mod does not require.
+      #
+      # M2 raised this from '1.25'. It is not a preference: SPEC.md §9.7
+      # requires ADK's `model/openaimodel` with a settable BaseURL, that package
+      # exists only from `google.golang.org/adk/v2` v2.1.0, and v2.1.0's go.mod
+      # says `go 1.26.5`. v2.0.0 has no `openaimodel` at all, so there is no
+      # version of ADK v2 that satisfies §9.7 under a 1.25 toolchain.
+      #
+      # Setting it here rather than leaving `auto` to download 1.26.5 matters
+      # for the step after next: `golangci-lint custom` builds the plugin binary
+      # with *this* toolchain, and a binary built by 1.25 refuses to lint a
+      # module targeting 1.26.5 with "the Go language version used to build
+      # golangci-lint is lower than the targeted Go version".
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.25'
+          go-version: '1.26'
 
       # §17.1: the stock golangci-lint-action does not load module plugins, so
       # using it would silently skip the determinism analyzer — the one check
@@ -89,8 +140,10 @@ jobs:
       - name: WASM build
         run: make demo
 
-      # §18.3, gated at 40 MiB. See the target: §18.1's `stat -c%s` is GNU-only
-      # and the recipe uses portable `wc -c`, reporting the measured size.
+      # §18.3, gated at 72 MiB from M2 (40 MiB through M1 — the raise and its
+      # argument are in §18.3, and the threshold itself lives in the Makefile so
+      # it is not re-derived in YAML). §18.1's `stat -c%s` is GNU-only, so the
+      # recipe uses portable `wc -c` and reports the measured size.
       - name: WASM size gate
         run: make wasm-size
 

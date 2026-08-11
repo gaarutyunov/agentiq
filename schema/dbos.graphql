@@ -25,8 +25,22 @@
 # For a @readonly type the physical type is never emitted as DDL; it only tells
 # the compiler how to shape the value back.
 #
-# `Workflow.session` (SPEC.md §7.3's HAS_SESSION edge) is deliberately absent:
-# `Session` lives in `schema/agentiq.graphql`, which does not exist until M2.
+# `Workflow.sessions` (SPEC.md §7.3's HAS_SESSION edge) arrived in M2, when
+# `schema/agentiq.graphql` did. The two documents are concatenated by
+# `tools/sdlmerge` before gopgql runs, because `--sdl` takes one file and a
+# property graph can only span `dbos.*` and `agentiq.*` if one document
+# describes both.
+#
+# `workflow_uuid` is TEXT, and is declared so here. SPEC.md §7.3 writes it
+# `ID!`, and M1 followed that; gopgql maps `ID` to uuid, which was invisible
+# while every table in this graph was `@readonly` and emitted no DDL. It stops
+# being invisible the moment `agentiq.session.workflow_uuid` — a column gopgql
+# does create — has to hold the same value: a graph whose two sides disagree is
+# rejected outright ("property \"workflow_uuid\" is text on \"agentiq.session\"
+# but uuid on \"dbos.workflow_status\"; a property name has one type across the
+# whole graph"), and one that agreed on uuid would emit an edge joining a uuid
+# column to a text one. `@column(type: "text")` states what the column is; see
+# test/drift/testdata/dbos_schema.json.
 #
 # SPEC.md §7.3 also writes `parent` and `childWorkflow` as to-one fields.
 # gopgql refuses a non-list `@relationship` field ("@relationship fields must be
@@ -44,7 +58,7 @@ type Workflow
   @node(label: "workflow", table: "workflow_status", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid"]) {
-  workflowUuid:     ID!       @column(name: "workflow_uuid")
+  workflowUuid:     ID!       @column(name: "workflow_uuid", type: "text")
   status:           String!
   name:             String!
   queueName:        String    @column(name: "queue_name")
@@ -95,6 +109,16 @@ type Workflow
     sourceKey: ["workflow_uuid"], destKey: ["parent_workflow_id"]
   )
 
+  # SPEC.md §6.2, §7.3. The edge that makes the graph span two schemas: the
+  # edge table is `agentiq.session`, which AgentIQ owns and migrates, while the
+  # source vertex is a `dbos.*` table it only reads. `agentiq.session.id` is
+  # gopgql's surrogate uuid, not ADK's session id — see schema/agentiq.graphql.
+  sessions: [Session!]! @relationship(
+    type: "HAS_SESSION", direction: OUT
+    table: "session", schema: "agentiq"
+    sourceKey: ["workflow_uuid"], destKey: ["id"]
+  )
+
   streams: [StreamValue!]! @relationship(
     type: "EMITTED", direction: OUT
     table: "streams", schema: "dbos"
@@ -106,7 +130,7 @@ type Step
   @node(label: "step", table: "operation_outputs", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid", "functionId"]) {
-  workflowUuid: ID!    @column(name: "workflow_uuid")
+  workflowUuid: ID!    @column(name: "workflow_uuid", type: "text")
   functionId:   Int!   @column(name: "function_id")
   functionName: String @column(name: "function_name")
   # TEXT holding a serializer payload, not JSON. See the note on Workflow.
@@ -124,7 +148,7 @@ type StreamValue
   @node(label: "stream_value", table: "streams", schema: "dbos")
   @readonly
   @key(fields: ["workflowUuid", "key", "seq"]) {
-  workflowUuid: ID!     @column(name: "workflow_uuid")
+  workflowUuid: ID!     @column(name: "workflow_uuid", type: "text")
   key:          String!
   seq:          Int!    @column(name: "offset") # `offset` is reserved; quoted
   # TEXT holding a serializer payload, not JSON. See the note on Workflow.
@@ -146,4 +170,69 @@ type Mutation {
     deduplicationId: String @column(name: "deduplication_id")
     priority: Int @column(name: "priority")
   ): String! @function(schema: "dbos", name: "enqueue_workflow")
+
+  # SPEC.md §8.3 and D2: one event, five tables, one call.
+  #
+  # It is a `@function` and not a generated write because gopgql has no
+  # generated writes — "gopgql derives no writes of its own; there is no
+  # generated `createPerson` and no inferred input type — it calls what the SDL
+  # names". `agentiq.append_event` is created by migrate/sql/0002.
+  #
+  # One call rather than five is what makes D2 reachable. `RunAsTransaction`
+  # commits the step checkpoint in the caller's transaction; five round-trips
+  # from Go would put the checkpoint atomically with only the last of them, and
+  # a crash between the third and the fourth would leave an event with some of
+  # its parts and a checkpoint saying it was appended.
+  #
+  # The five documents are JSON rather than typed arguments because the rows
+  # they carry have around seventy columns between them, and a seventy-argument
+  # PL/pgSQL signature is one whose call sites go wrong silently. Postgres
+  # unpacks them with `json_populate_record`, so the column names are checked by
+  # the server against the real tables rather than by position.
+  #
+  # This field sits in the `dbos.*` document only because a GraphQL document has
+  # one `type Mutation`, and this is where it is declared. It is AgentIQ's own.
+  appendEvent(
+    sessionId: ID! @column(name: "p_session_id")
+    event: JSON! @column(name: "p_event")
+    parts: JSON! @column(name: "p_parts")
+    actions: JSON! @column(name: "p_actions")
+    stateDeltas: JSON! @column(name: "p_state_deltas")
+    artifactDeltas: JSON! @column(name: "p_artifact_deltas")
+  ): ID! @function(schema: "agentiq", name: "append_event")
+
+  # The session lifecycle half of ADK's `session.Service` (SPEC.md §8.3).
+  # Reads are not here: Query.session/sessions/event/part are compiled
+  # GRAPH_TABLE traversals, so the read model stays generated (§21) and only the
+  # writes — of which gopgql derives none — are functions.
+  #
+  # createSession is an upsert. ADK calls Create with a client-supplied session
+  # id on every turn, not once per conversation, and `sessiontestsuite` calls it
+  # repeatedly with the same id; returning the existing row is what makes that a
+  # no-op instead of a duplicate-key error, and what lets a replayed workflow
+  # find the session its first attempt made.
+  #
+  # It returns the ADK session id, not the surrogate uuid: that is the id
+  # `CreateResponse.Session.ID()` carries and the only one a caller can ask for
+  # the session back by. `adkId` may be empty, in which case the function
+  # allocates one — `sessiontestsuite` calls Create with no session id and
+  # requires one to come back, and allocating it in Go would be a uuid drawn in
+  # workflow code.
+  createSession(
+    adkId: String! @column(name: "p_adk_id")
+    appName: String! @column(name: "p_app_name")
+    userId: String! @column(name: "p_user_id")
+    agentDigest: String! @column(name: "p_agent_digest")
+    workflowUuid: String @column(name: "p_workflow_uuid")
+    state: JSON! @column(name: "p_state")
+  ): String! @function(schema: "agentiq", name: "create_session")
+
+  # Returns the number of session rows removed: 1, or 0 when there was nothing
+  # to delete. Deleting an absent session is a success — ADK's Delete has no
+  # "not found" and the conformance suite calls it on sessions it never made.
+  deleteSession(
+    adkId: String! @column(name: "p_adk_id")
+    appName: String! @column(name: "p_app_name")
+    userId: String! @column(name: "p_user_id")
+  ): Int! @function(schema: "agentiq", name: "delete_session")
 }

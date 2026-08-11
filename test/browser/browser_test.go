@@ -3,8 +3,10 @@
 package browser
 
 import (
+	"bytes"
 	"context"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -43,18 +45,58 @@ func TestBrowserRuntime(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), suiteTimeout)
 	t.Cleanup(cancel)
 
+	// Chrome's own stderr, captured.
+	//
+	// Without this the only thing a startup failure produces is chromedp's
+	// internal 20-second wait for the DevTools websocket URL expiring:
+	//
+	//	browser_test.go:57: Received unexpected error: websocket url timeout reached
+	//	Messages: start headless Chrome
+	//
+	// That message names the symptom of every possible cause and the cause of
+	// none — Chrome missing, Chrome killed by the sandbox, Chrome out of shared
+	// memory and Chrome crashing on a bad flag all produce exactly those words.
+	// Chrome says which one it was on stderr and nothing was reading it.
+	//
+	// It is a buffer rather than a direct pipe to the test log because Chrome is
+	// chatty on a healthy run too; the contents are only printed when the
+	// handshake fails, which is the only time they are worth reading.
+	var chromeOutput bytes.Buffer
+	allocOpts := append([]chromedp.ExecAllocatorOption{}, chromedp.DefaultExecAllocatorOptions[:]...)
+	allocOpts = append(allocOpts, chromedp.CombinedOutput(&chromeOutput))
+
+	// Pay the machine's one-time first-launch cost before the handshake that is
+	// timed, and pin chromedp to the binary that was warmed. See warmup_test.go:
+	// the first launch on a cold runner takes about twenty-three seconds and
+	// every launch after it about two hundred milliseconds, while chromedp gives
+	// the DevTools websocket URL twenty seconds — which is the whole of this
+	// suite's flake.
+	if browserPath := findBrowser(); browserPath != "" {
+		warmBrowser(t, browserPath)
+		allocOpts = append(allocOpts, chromedp.ExecPath(browserPath))
+	} else {
+		warmBrowser(t, "")
+	}
+
 	// One browser for the suite. Each scenario gets its own tab, because the
 	// reload scenario must not disturb the others and IndexedDB is per-origin,
 	// not per-tab.
-	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, chromedp.DefaultExecAllocatorOptions[:]...)
+	allocCtx, cancelAlloc := chromedp.NewExecAllocator(ctx, allocOpts...)
 	t.Cleanup(cancelAlloc)
 
 	browserCtx, cancelBrowser := chromedp.NewContext(allocCtx)
 	t.Cleanup(cancelBrowser)
 
-	// Fail early and clearly if Chrome is not installed, rather than as a
-	// timeout on the first navigation.
-	require.NoError(t, chromedp.Run(browserCtx), "start headless Chrome")
+	// Fail early and clearly if Chrome cannot start, rather than as a timeout on
+	// the first navigation — and say what Chrome said.
+	if err := chromedp.Run(browserCtx); err != nil {
+		out := strings.TrimSpace(chromeOutput.String())
+		if out == "" {
+			out = "(Chrome wrote nothing to stderr, which points at the binary " +
+				"never being executed at all rather than at it failing to start)"
+		}
+		require.NoError(t, err, "start headless Chrome\n--- chrome stderr ---\n%s\n--- end ---", out)
+	}
 
 	s := &suite{target: target, browser: browserCtx}
 
